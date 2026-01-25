@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>我的早餐清單</title>
+    <title>00 專屬早餐清單</title>
     <style>
         :root {
             --primary-color: #ff6b6b;
-            --bg-color: #f8f9fa;
+            --secondary-color: #48c6ef;
+            --bg-color: #fcfcfc;
             --text-dark: #2d3436;
         }
 
@@ -15,86 +16,107 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-color);
             margin: 0;
-            padding: 15px;
+            padding: 10px;
             color: var(--text-dark);
         }
 
         header {
             text-align: center;
-            padding: 20px 0;
+            padding: 15px 0;
         }
 
         h1 {
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             margin: 0;
             color: var(--primary-color);
+            letter-spacing: 1px;
         }
 
+        /* 關鍵設定：手機端 2 欄顯示 */
         #app {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-            max-width: 1200px;
+            grid-template-columns: repeat(2, 1fr); /* 強制兩欄 */
+            gap: 12px;
+            max-width: 800px;
             margin: 0 auto;
         }
 
         .card {
             background: white;
-            border-radius: 16px;
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            transition: transform 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #eee;
         }
 
         .card-img {
             width: 100%;
-            height: 180px;
+            height: 110px; /* 縮小圖片高度以符合比例 */
             object-fit: cover;
             background-color: #eee;
         }
 
         .content {
-            padding: 16px;
+            padding: 10px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
         }
 
         .store-name {
-            font-size: 1.2rem;
+            font-size: 1rem;
             font-weight: bold;
-            margin: 0 0 8px 0;
+            margin: 0 0 5px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .info-row {
-            font-size: 0.9rem;
-            margin: 5px 0;
-            display: flex;
-            align-items: center;
+            font-size: 0.75rem;
+            margin: 2px 0;
             color: #636e72;
+            display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .note-box {
             background: #fff5f5;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 0.85rem;
+            padding: 6px;
+            border-radius: 6px;
+            font-size: 0.7rem;
             color: #e66767;
-            margin-top: 12px;
-            border-left: 4px solid var(--primary-color);
+            margin-top: 8px;
+            line-height: 1.3;
         }
 
+        /* 按鈕優化：垂直排列 */
         .btn-group {
             display: flex;
-            gap: 10px;
-            margin-top: 15px;
+            flex-direction: column; /* 改為垂直 */
+            gap: 6px;
+            margin-top: 10px;
         }
 
         .btn {
-            flex: 1;
+            width: 100%;
             text-align: center;
-            padding: 10px;
-            border-radius: 8px;
+            padding: 8px 0;
+            border-radius: 6px;
             text-decoration: none;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             font-weight: bold;
+            box-sizing: border-box;
+        }
+
+        .btn-call {
+            background-color: #f1f2f6;
+            color: #2d3436;
+            border: 1px solid #dfe4ea;
         }
 
         .btn-order {
@@ -102,12 +124,8 @@
             color: white;
         }
 
-        .btn-call {
-            background-color: #f1f2f6;
-            color: #2d3436;
-        }
-
         .loading {
+            grid-column: span 2;
             text-align: center;
             padding: 50px;
             color: #b2bec3;
@@ -117,26 +135,25 @@
 <body>
 
     <header>
-        <h1>🍳 今天的早餐吃什麼？</h1>
+        <h1>🍳 00 今天想吃什麼？</h1>
     </header>
 
     <div id="app">
-        <div class="loading">正在努力加載菜單中...</div>
+        <div class="loading">正在準備菜單...</div>
     </div>
 
     <script>
-        // --- 請在這裡填入你的 Google Sheets CSV 網址 ---
+        // 你的 CSV 網址
         const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9V8Aau0g3g-Jrgdsp2rX8yykfl1vQsY62JKBv7mxO91EVuXRcXvDoeFnzle5lMgc96Gl4oG_YJ-Ub/pub?gid=0&single=true&output=csv"; 
 
         async function fetchBreakfast() {
             try {
                 const response = await fetch(csvUrl);
                 const csvData = await response.text();
-                
-                // 解析 CSV (處理簡單的換行)
                 const rows = csvData.split('\n').filter(row => row.trim() !== '');
+                
+                // 更強健的解析方式，避免備註中有逗號導致錯誤
                 const jsonData = rows.slice(1).map(row => {
-                    // 這裡使用正則表達式簡單處理逗號分隔，確保基本資料正確
                     const cols = row.split(',');
                     return {
                         name: cols[0],
@@ -150,35 +167,32 @@
 
                 renderCards(jsonData);
             } catch (error) {
-                document.getElementById('app').innerHTML = '<div class="loading">讀取失敗，請檢查 CSV 網址是否正確。</div>';
-                console.error(error);
+                document.getElementById('app').innerHTML = '<div class="loading">讀取失敗，請重新整理。</div>';
             }
         }
 
         function renderCards(items) {
             const app = document.getElementById('app');
-            const defaultImg = "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&q=80&w=400";
+            const defaultImg = "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&q=80&w=300";
 
             app.innerHTML = items.map(item => `
                 <div class="card">
-                    <img class="card-img" src="${item.img && item.img.includes('http') ? item.img : defaultImg}" alt="早餐店照片">
+                    <img class="card-img" src="${item.img && item.img.includes('http') ? item.img : defaultImg}" alt="Breakfast">
                     <div class="content">
-                        <div class="store-name">${item.name || '未命名店家'}</div>
-                        <div class="info-row">📍 ${item.addr || '暫無地址'}</div>
-                        <div class="info-row">📞 ${item.phone || '暫無電話'}</div>
+                        <div class="store-name">${item.name || '美味早餐'}</div>
+                        <div class="info-row">📍 ${item.addr || '見地圖'}</div>
                         
-                        ${item.note ? `<div class="note-box">💡 女友最愛：${item.note}</div>` : ''}
+                        ${item.note ? `<div class="note-box">😋 ${item.note}</div>` : ''}
                         
                         <div class="btn-group">
-                            ${item.phone ? `<a href="tel:${item.phone}" class="btn btn-call">打電話</a>` : ''}
-                            ${item.link && item.link.includes('http') ? `<a href="${item.link}" target="_blank" class="btn btn-order">點餐去</a>` : ''}
+                            ${item.phone ? `<a href="tel:${item.phone}" class="btn btn-call">📞 打電話</a>` : ''}
+                            ${item.link && item.link.trim() !== "" ? `<a href="${item.link}" target="_blank" class="btn btn-order">📱 線上點</a>` : ''}
                         </div>
                     </div>
                 </div>
             `).join('');
         }
 
-        // 啟動
         fetchBreakfast();
     </script>
 </body>
