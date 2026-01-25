@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>我的早餐清單</title>
+    <style>
+        :root {
+            --primary-color: #ff6b6b;
+            --bg-color: #f8f9fa;
+            --text-dark: #2d3436;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 15px;
+            color: var(--text-dark);
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 0;
+            color: var(--primary-color);
+        }
+
+        #app {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: transform 0.2s;
+        }
+
+        .card-img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            background-color: #eee;
+        }
+
+        .content {
+            padding: 16px;
+        }
+
+        .store-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin: 0 0 8px 0;
+        }
+
+        .info-row {
+            font-size: 0.9rem;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+            color: #636e72;
+        }
+
+        .note-box {
+            background: #fff5f5;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #e66767;
+            margin-top: 12px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+
+        .btn-order {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-call {
+            background-color: #f1f2f6;
+            color: #2d3436;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #b2bec3;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🍳 今天的早餐吃什麼？</h1>
+    </header>
+
+    <div id="app">
+        <div class="loading">正在努力加載菜單中...</div>
+    </div>
+
+    <script>
+        // --- 請在這裡填入你的 Google Sheets CSV 網址 ---
+        const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9V8Aau0g3g-Jrgdsp2rX8yykfl1vQsY62JKBv7mxO91EVuXRcXvDoeFnzle5lMgc96Gl4oG_YJ-Ub/pub?gid=0&single=true&output=csv"; 
+
+        async function fetchBreakfast() {
+            try {
+                const response = await fetch(csvUrl);
+                const csvData = await response.text();
+                
+                // 解析 CSV (處理簡單的換行)
+                const rows = csvData.split('\n').filter(row => row.trim() !== '');
+                const jsonData = rows.slice(1).map(row => {
+                    // 這裡使用正則表達式簡單處理逗號分隔，確保基本資料正確
+                    const cols = row.split(',');
+                    return {
+                        name: cols[0],
+                        img: cols[1],
+                        phone: cols[2],
+                        addr: cols[3],
+                        link: cols[4],
+                        note: cols[5]
+                    };
+                });
+
+                renderCards(jsonData);
+            } catch (error) {
+                document.getElementById('app').innerHTML = '<div class="loading">讀取失敗，請檢查 CSV 網址是否正確。</div>';
+                console.error(error);
+            }
+        }
+
+        function renderCards(items) {
+            const app = document.getElementById('app');
+            const defaultImg = "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&q=80&w=400";
+
+            app.innerHTML = items.map(item => `
+                <div class="card">
+                    <img class="card-img" src="${item.img && item.img.includes('http') ? item.img : defaultImg}" alt="早餐店照片">
+                    <div class="content">
+                        <div class="store-name">${item.name || '未命名店家'}</div>
+                        <div class="info-row">📍 ${item.addr || '暫無地址'}</div>
+                        <div class="info-row">📞 ${item.phone || '暫無電話'}</div>
+                        
+                        ${item.note ? `<div class="note-box">💡 女友最愛：${item.note}</div>` : ''}
+                        
+                        <div class="btn-group">
+                            ${item.phone ? `<a href="tel:${item.phone}" class="btn btn-call">打電話</a>` : ''}
+                            ${item.link && item.link.includes('http') ? `<a href="${item.link}" target="_blank" class="btn btn-order">點餐去</a>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 啟動
+        fetchBreakfast();
+    </script>
+</body>
+</html>
