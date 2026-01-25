@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>00 專屬早餐清單</title>
+    
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/887/887396.png">
+    <meta name="apple-mobile-web-app-title" content="早餐點餐">
+
     <style>
         :root {
             --primary-color: #ff6b6b;
-            --secondary-color: #48c6ef;
             --bg-color: #fcfcfc;
             --text-dark: #2d3436;
         }
@@ -17,119 +20,89 @@
             background-color: var(--bg-color);
             margin: 0;
             padding: 10px;
-            color: var(--text-dark);
         }
 
-        header {
-            text-align: center;
-            padding: 15px 0;
-        }
+        header { text-align: center; padding: 15px 0; }
+        h1 { font-size: 1.2rem; margin: 0; color: var(--primary-color); }
 
-        h1 {
-            font-size: 1.2rem;
-            margin: 0;
-            color: var(--primary-color);
-            letter-spacing: 1px;
-        }
-
-        /* 關鍵設定：手機端 2 欄顯示 */
+        /* 首頁 2 欄佈局 */
         #app {
             display: grid;
-            grid-template-columns: repeat(2, 1fr); /* 強制兩欄 */
+            grid-template-columns: repeat(2, 1fr);
             gap: 12px;
             max-width: 800px;
             margin: 0 auto;
         }
 
+        /* 簡潔版卡片 */
         .card {
             background: white;
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-            display: flex;
-            flex-direction: column;
-            border: 1px solid #eee;
+            cursor: pointer;
         }
 
-        .card-img {
-            width: 100%;
-            height: 110px; /* 縮小圖片高度以符合比例 */
-            object-fit: cover;
-            background-color: #eee;
-        }
+        .card-img { width: 100%; height: 110px; object-fit: cover; background: #eee; }
+        .card-name { padding: 10px; font-size: 0.95rem; font-weight: bold; text-align: center; }
 
-        .content {
-            padding: 10px;
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .store-name {
-            font-size: 1rem;
-            font-weight: bold;
-            margin: 0 0 5px 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .info-row {
-            font-size: 0.75rem;
-            margin: 2px 0;
-            color: #636e72;
-            display: block;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .note-box {
-            background: #fff5f5;
-            padding: 6px;
-            border-radius: 6px;
-            font-size: 0.7rem;
-            color: #e66767;
-            margin-top: 8px;
-            line-height: 1.3;
-        }
-
-        /* 按鈕優化：垂直排列 */
-        .btn-group {
-            display: flex;
-            flex-direction: column; /* 改為垂直 */
-            gap: 6px;
-            margin-top: 10px;
-        }
-
-        .btn {
-            width: 100%;
-            text-align: center;
-            padding: 8px 0;
-            border-radius: 6px;
-            text-decoration: none;
-            font-size: 0.8rem;
-            font-weight: bold;
+        /* 彈窗背景 (Overlay) */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: none; /* 預設隱藏 */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            padding: 20px;
             box-sizing: border-box;
         }
 
-        .btn-call {
-            background-color: #f1f2f6;
-            color: #2d3436;
-            border: 1px solid #dfe4ea;
+        /* 彈窗內容框 */
+        .modal-content {
+            background: white;
+            width: 100%;
+            max-width: 350px;
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            animation: fadeIn 0.3s;
         }
 
-        .btn-order {
-            background-color: var(--primary-color);
-            color: white;
+        @keyframes fadeIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .close-btn {
+            position: absolute;
+            top: 10px; left: 10px;
+            width: 30px; height: 30px;
+            background: rgba(255,255,255,0.8);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; font-weight: bold; color: #333;
+            cursor: pointer; z-index: 1001;
         }
 
-        .loading {
-            grid-column: span 2;
-            text-align: center;
-            padding: 50px;
-            color: #b2bec3;
+        .modal-img { width: 100%; height: 200px; object-fit: cover; }
+        .modal-body { padding: 20px; }
+        .modal-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 10px; }
+        .modal-info { font-size: 0.9rem; color: #636e72; margin: 8px 0; }
+        
+        .modal-note {
+            background: #fff5f5; padding: 10px; border-radius: 10px;
+            color: #e66767; font-size: 0.85rem; margin-top: 15px;
+            border-left: 4px solid var(--primary-color);
         }
+
+        .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+        .btn {
+            padding: 12px; border-radius: 10px; text-align: center;
+            text-decoration: none; font-weight: bold; font-size: 0.9rem;
+        }
+        .btn-call { background: #f1f2f6; color: #2d3436; }
+        .btn-order { background: var(--primary-color); color: white; }
+
+        .loading { grid-column: span 2; text-align: center; padding: 50px; color: #ccc; }
     </style>
 </head>
 <body>
@@ -142,58 +115,81 @@
         <div class="loading">正在準備菜單...</div>
     </div>
 
-    <script>
-        // 你的 CSV 網址
-        const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9V8Aau0g3g-Jrgdsp2rX8yykfl1vQsY62JKBv7mxO91EVuXRcXvDoeFnzle5lMgc96Gl4oG_YJ-Ub/pub?gid=0&single=true&output=csv"; 
+    <div id="modal" class="modal-overlay" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="close-btn" onclick="document.getElementById('modal').style.display='none'">×</div>
+            <img id="m-img" class="modal-img" src="" alt="">
+            <div class="modal-body">
+                <div id="m-name" class="modal-title"></div>
+                <div id="m-addr" class="modal-info"></div>
+                <div id="m-phone" class="modal-info"></div>
+                <div id="m-note" class="modal-note"></div>
+                <div class="btn-group">
+                    <a id="m-call-btn" href="" class="btn btn-call">📞 撥打電話</a>
+                    <a id="m-order-btn" href="" target="_blank" class="btn btn-order">📱 線上點餐</a>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        async function fetchBreakfast() {
+    <script>
+        const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9V8Aau0g3g-Jrgdsp2rX8yykfl1vQsY62JKBv7mxO91EVuXRcXvDoeFnzle5lMgc96Gl4oG_YJ-Ub/pub?gid=0&single=true&output=csv"; 
+        let breakfastData = [];
+
+        async function fetchData() {
             try {
                 const response = await fetch(csvUrl);
-                const csvData = await response.text();
-                const rows = csvData.split('\n').filter(row => row.trim() !== '');
-                
-                // 更強健的解析方式，避免備註中有逗號導致錯誤
-                const jsonData = rows.slice(1).map(row => {
-                    const cols = row.split(',');
-                    return {
-                        name: cols[0],
-                        img: cols[1],
-                        phone: cols[2],
-                        addr: cols[3],
-                        link: cols[4],
-                        note: cols[5]
-                    };
+                const csv = await response.text();
+                const rows = csv.split('\n').filter(r => r.trim() !== '');
+                breakfastData = rows.slice(1).map(row => {
+                    const c = row.split(',');
+                    return { name: c[0], img: c[1], phone: c[2], addr: c[3], link: c[4], note: c[5] };
                 });
-
-                renderCards(jsonData);
-            } catch (error) {
-                document.getElementById('app').innerHTML = '<div class="loading">讀取失敗，請重新整理。</div>';
-            }
+                renderCards();
+            } catch (e) { console.error(e); }
         }
 
-        function renderCards(items) {
+        function renderCards() {
             const app = document.getElementById('app');
-            const defaultImg = "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&q=80&w=300";
-
-            app.innerHTML = items.map(item => `
-                <div class="card">
-                    <img class="card-img" src="${item.img && item.img.includes('http') ? item.img : defaultImg}" alt="Breakfast">
-                    <div class="content">
-                        <div class="store-name">${item.name || '美味早餐'}</div>
-                        <div class="info-row">📍 ${item.addr || '見地圖'}</div>
-                        
-                        ${item.note ? `<div class="note-box">😋 ${item.note}</div>` : ''}
-                        
-                        <div class="btn-group">
-                            ${item.phone ? `<a href="tel:${item.phone}" class="btn btn-call">📞 打電話</a>` : ''}
-                            ${item.link && item.link.trim() !== "" ? `<a href="${item.link}" target="_blank" class="btn btn-order">📱 線上點</a>` : ''}
-                        </div>
-                    </div>
+            const defImg = "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=300";
+            app.innerHTML = breakfastData.map((item, index) => `
+                <div class="card" onclick="openModal(${index})">
+                    <img class="card-img" src="${item.img?.includes('http') ? item.img : defImg}">
+                    <div class="card-name">${item.name || '美味早餐'}</div>
                 </div>
             `).join('');
         }
 
-        fetchBreakfast();
+        function openModal(index) {
+            const item = breakfastData[index];
+            const defImg = "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=500";
+            
+            document.getElementById('m-img').src = item.img?.includes('http') ? item.img : defImg;
+            document.getElementById('m-name').innerText = item.name;
+            document.getElementById('m-addr').innerText = "📍 " + (item.addr || "暫無地址");
+            document.getElementById('m-phone').innerText = "📞 " + (item.phone || "暫無電話");
+            
+            const noteEl = document.getElementById('m-note');
+            if(item.note) { noteEl.innerText = "😋 00愛吃：" + item.note; noteEl.style.display = "block"; }
+            else { noteEl.style.display = "none"; }
+
+            // 按鈕顯示逻辑
+            const cBtn = document.getElementById('m-call-btn');
+            if(item.phone) { cBtn.href = "tel:" + item.phone; cBtn.style.display = "block"; }
+            else { cBtn.style.display = "none"; }
+
+            const oBtn = document.getElementById('m-order-btn');
+            if(item.link?.includes('http')) { oBtn.href = item.link; oBtn.style.display = "block"; }
+            else { oBtn.style.display = "none"; }
+
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal(e) {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        fetchData();
     </script>
 </body>
 </html>
