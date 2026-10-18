@@ -32,6 +32,7 @@
         'map-pin': '<path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/>',
         'lock': '<path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M8 11v-4a4 4 0 1 1 8 0v4"/>',
         'dice-5': '<path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/><circle cx="8.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="15.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="15.5" r=".5" fill="currentColor"/><circle cx="12" cy="12" r=".5" fill="currentColor"/>',
+        'heart': '<path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/>',
         'tools-kitchen-2': '<path d="M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3"/>',
     };
     const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -232,17 +233,24 @@
 
     async function doDraw() {
         if (state.rolling) return;
-        const { list } = drawPool();
-        if (!list.length) return;
+        const { list, skipped } = drawPool();
+        if (!list.length) {
+            toast('這個類型還沒有店家');
+            return;
+        }
         const choices = list.length > 1 ? list.filter((x) => x.id !== state.pick) : list;
         const final = choices[Math.floor(Math.random() * choices.length)];
+        const dlg = $('#pick');
+        if (!dlg.open) dlg.showModal();
 
         if (list.length > 1 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
             state.rolling = true;
-            $('#draw').innerHTML = `
+            dlg.innerHTML = `
+                <div class="sheet-grip"></div>
                 <div class="pick rolling">
+                    <p class="pick-label">抽籤中…</p>
+                    <h2 class="pick-name" id="roll-name" tabindex="-1" autofocus>&nbsp;</h2>
                     <div class="photo">${icon('dice-5')}</div>
-                    <div class="pick-info"><span class="pick-label">抽籤中…</span><h2 class="pick-name" id="roll-name"></h2></div>
                 </div>`;
             const nameEl = $('#roll-name');
             for (let i = 0; i < 14; i++) {
@@ -253,7 +261,22 @@
         }
         state.pick = final.id;
         if (navigator.vibrate) navigator.vibrate(20);
-        renderDraw();
+        dlg.innerHTML = pickHtml(final, list.length, skipped);
+    }
+
+    function pickHtml(item, total, skipped) {
+        const from = state.filter === '全部' ? '' : `「${state.filter}」`;
+        return `
+            <div class="sheet-grip"></div>
+            <div class="pick reveal">
+                <p class="pick-label">今天就吃</p>
+                <h2 class="pick-name" tabindex="-1" autofocus>${esc(item.name)}</h2>
+                ${photoHtml(item)}
+                ${item.note ? `<div class="note"><b>00 愛吃</b>${esc(item.note)}</div>` : ''}
+                ${actionsHtml(item)}
+                <button type="button" class="btn primary big full" data-act="draw">${icon('arrows-shuffle')}再抽一次</button>
+                <p class="pick-hint">從${from} ${total} 家裡抽${skipped ? `，已略過 ${skipped} 家打烊` : ''}</p>
+            </div>`;
     }
 
     /* ---------- 畫面 ---------- */
@@ -270,11 +293,13 @@
             </div>`;
     }
 
-    function infoHtml(item, { hours = false } = {}) {
-        return `
-            ${item.addr ? `<div class="meta">${icon('map-pin')}<span>${esc(item.addr)}</span></div>` : ''}
-            ${hours && item.hours ? `<div class="meta">${icon('clock')}<span>${esc(item.hours)}</span></div>` : ''}
-            ${item.note ? `<div class="note"><b>00 愛吃</b>${esc(item.note)}</div>` : ''}`;
+    // 卡片固定顯示四行，沒填的用淡色提示，每張卡片才會一樣整齊
+    function infoRows(item) {
+        const row = (name, text, empty) => `<div class="meta${empty ? ' muted' : ''}">${icon(name)}<span>${esc(text)}</span></div>`;
+        return row('map-pin', item.addr || '沒有地址', !item.addr)
+            + row('clock', item.hours || '營業時間還沒填', !item.hours)
+            + row('phone', item.phone || '沒有電話', !item.phone)
+            + (item.note ? `<div class="note"><b>00 愛吃</b>${esc(item.note)}</div>` : row('heart', '00 愛吃：還沒記錄', true));
     }
 
     function actionsHtml(item) {
@@ -288,41 +313,8 @@
             </div>`;
     }
 
-    function renderDraw() {
-        if (state.rolling) return;
-        const el = $('#draw');
-        if (!state.loaded) { el.innerHTML = ''; el.hidden = true; return; }
-        el.hidden = false;
-
-        const picked = findItem(state.pick);
-        if (!picked) {
-            const { list, skipped } = drawPool();
-            const from = state.filter === '全部' ? '' : `「${state.filter}」`;
-            const hint = list.length
-                ? `從${from} ${list.length} 家裡抽${skipped ? `（略過 ${skipped} 家打烊）` : ''}`
-                : '這個類型還沒有店家';
-            el.innerHTML = `
-                <div class="draw-intro">
-                    <p>不知道吃什麼嗎？</p>
-                    <button type="button" class="btn primary big" data-act="draw" ${list.length ? '' : 'disabled'}>${icon('dice-5')}幫我抽一家</button>
-                </div>
-                <small class="draw-hint">${esc(hint)}</small>`;
-            return;
-        }
-
-        const st = statusOf(picked);
-        el.innerHTML = `
-            <div class="pick reveal">
-                ${photoHtml(picked, { status: false })}
-                <div class="pick-info">
-                    <span class="pick-label">今天就吃</span>
-                    <h2 class="pick-name">${esc(picked.name)}</h2>
-                    ${st ? `<span class="status ${st.cls}">${esc(st.text)}</span>` : ''}
-                    ${picked.note ? `<div class="note"><b>00 愛吃</b>${esc(picked.note)}</div>` : ''}
-                </div>
-            </div>
-            ${actionsHtml(picked)}
-            <button type="button" class="btn full draw-again" data-act="draw">${icon('arrows-shuffle')}再抽一次</button>`;
+    function renderBar() {
+        $('#draw-btn').disabled = !state.loaded || !drawPool().list.length;
     }
 
     function renderChips() {
@@ -347,7 +339,7 @@
         const list = visible();
         const box = $('#list');
         if (!state.items.length) {
-            box.innerHTML = `<div class="state">還沒有店家${isAdmin() ? '<br>按右下角的＋新增第一家' : ''}</div>`;
+            box.innerHTML = `<div class="state">還沒有店家${isAdmin() ? '<br>按右上角的「新增」加入第一家' : ''}</div>`;
             return;
         }
         if (!list.length) {
@@ -364,7 +356,7 @@
                 ${photoHtml(item, { tags: true, edit: true })}
                 <div class="body">
                     <h3 class="name">${esc(item.name)}</h3>
-                    ${infoHtml(item)}
+                    ${infoRows(item)}
                     ${actionsHtml(item)}
                 </div>
             </article>`).join('');
@@ -421,15 +413,28 @@
         track.scrollTo({ left: cardOffset(track, target), behavior: 'smooth' });
     }
 
+    const GROUPS = [['open', '營業中'], ['soon', '等一下開'], ['none', '營業時間還沒填'], ['closed', '現在沒開']];
+
     function renderGrid(list) {
-        $('#list').innerHTML = `<div class="grid">${list.map((item) => `
+        const card = (item) => `
             <div class="gcard" role="button" tabindex="0" data-act="detail" data-id="${esc(item.id)}" aria-label="${esc(item.name)}">
                 ${photoHtml(item, { edit: true })}
                 <div class="body">
                     <h3 class="name">${esc(item.name)}</h3>
                     ${item.note ? `<div class="like">愛吃 ${esc(item.note)}</div>` : ''}
                 </div>
-            </div>`).join('')}</div>`;
+            </div>`;
+
+        // 都還沒填營業時間就不分組
+        if (!list.some((it) => it.hours)) {
+            $('#list').innerHTML = `<div class="grid">${list.map(card).join('')}</div>`;
+            return;
+        }
+        const groups = { open: [], soon: [], none: [], closed: [] };
+        list.forEach((it) => groups[(statusOf(it) || { cls: 'none' }).cls].push(it));
+        $('#list').innerHTML = GROUPS.filter(([key]) => groups[key].length).map(([key, label]) => `
+            <h3 class="group-title ${key}">${label}・${groups[key].length} 家</h3>
+            <div class="grid${key === 'closed' ? ' dim' : ''}">${groups[key].map(card).join('')}</div>`).join('');
     }
 
     function renderFoot() {
@@ -440,7 +445,7 @@
     function renderAll() {
         document.body.classList.toggle('admin', isAdmin());
         renderChips();
-        renderDraw();
+        renderBar();
         renderToggle();
         renderList();
         renderFoot();
@@ -454,18 +459,47 @@
         dlg.innerHTML = `
             <div class="detail">
                 <div style="position:relative">
+                    <div class="sheet-grip on-photo"></div>
                     <button type="button" class="icon-btn close" data-close aria-label="關閉">${icon('x')}</button>
                     ${photoHtml(item, { tags: true, status: false, edit: true })}
                 </div>
                 <div class="body">
-                    <h2 class="name">${esc(item.name)}</h2>
+                    <h2 class="name" tabindex="-1" autofocus>${esc(item.name)}</h2>
                     ${st ? `<span class="status ${st.cls}">${esc(st.text)}</span>` : ''}
-                    ${item.phone ? `<div class="meta">${icon('phone')}<span>${esc(item.phone)}</span></div>` : ''}
-                    ${infoHtml(item, { hours: true })}
+                    ${infoRows(item)}
                     ${actionsHtml(item)}
                 </div>
             </div>`;
         dlg.showModal();
+    }
+
+    function enableSwipeClose(dlg) {
+        let startY = null;
+        let dy = 0;
+        const reset = () => { dlg.style.transform = ''; dlg.style.transition = ''; };
+        dlg.addEventListener('touchstart', (e) => {
+            if (dlg.scrollTop > 0 || e.touches.length !== 1) { startY = null; return; }
+            startY = e.touches[0].clientY;
+            dy = 0;
+            dlg.style.transition = 'none';
+        }, { passive: true });
+        dlg.addEventListener('touchmove', (e) => {
+            if (startY == null) return;
+            dy = e.touches[0].clientY - startY;
+            dlg.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+        }, { passive: true });
+        dlg.addEventListener('touchend', () => {
+            if (startY == null) return;
+            startY = null;
+            dlg.style.transition = 'transform 0.2s ease-out';
+            if (dy > 90) {
+                dlg.style.transform = 'translateY(100%)';
+                setTimeout(() => dlg.close(), 180);
+            } else {
+                dlg.style.transform = '';
+            }
+        });
+        dlg.addEventListener('close', reset);
     }
 
     let toastTimer;
@@ -720,7 +754,10 @@
     function bind() {
         $('.view-toggle [data-view="swipe"]').innerHTML = icon('carousel-horizontal');
         $('.view-toggle [data-view="grid"]').innerHTML = icon('layout-grid');
-        $('#add-btn').innerHTML = icon('plus');
+        $('#add-btn').innerHTML = `${icon('plus')}新增`;
+        $('#draw-btn').innerHTML = `${icon('dice-5')}幫我抽一家`;
+        enableSwipeClose($('#pick'));
+        enableSwipeClose($('#detail'));
         $('#editor [data-close]').innerHTML = icon('x');
 
         document.addEventListener('click', (e) => {

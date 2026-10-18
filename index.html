@@ -20,19 +20,15 @@
     <div class="wrap">
         <header class="top">
             <h1>00 今天想吃什麼？</h1>
-            <span class="admin-badge">管理模式</span>
+            <div class="top-right">
+                <span class="admin-badge">管理模式</span>
+                <button type="button" id="add-btn" class="btn primary sm add-btn" aria-label="新增店家"></button>
+            </div>
         </header>
 
-        <!-- 抽籤區 -->
-        <section id="draw" class="draw" aria-live="polite"></section>
-
-        <!-- 分類 + 切換檢視 -->
+        <!-- 依類型篩選 -->
         <div class="toolbar">
             <div id="chips" class="chips" role="tablist" aria-label="依類型篩選"></div>
-            <div class="view-toggle" role="group" aria-label="切換檢視">
-                <button type="button" data-view="swipe" aria-label="滑動卡片"></button>
-                <button type="button" data-view="grid" aria-label="看全部"></button>
-            </div>
         </div>
 
         <main id="list">
@@ -45,7 +41,17 @@
         </footer>
     </div>
 
-    <button type="button" id="add-btn" class="fab" aria-label="新增店家"></button>
+    <!-- 底部操作列：拇指按得到的位置 -->
+    <nav class="bottom-bar">
+        <div class="view-toggle" role="group" aria-label="切換檢視">
+            <button type="button" data-view="swipe" aria-label="滑動卡片"></button>
+            <button type="button" data-view="grid" aria-label="看全部"></button>
+        </div>
+        <button type="button" id="draw-btn" class="btn primary draw-btn" data-act="draw" disabled></button>
+    </nav>
+
+    <!-- 抽籤結果 -->
+    <dialog id="pick" class="sheet" aria-live="polite"></dialog>
 
     <!-- 店家詳細（看全部模式點卡片） -->
     <dialog id="detail" class="sheet"></dialog>
