@@ -2,194 +2,127 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>00 專屬早餐清單</title>
-    
-    <link rel="apple-touch-icon" href="https://i.postimg.cc/ydHfd4hR/IMG-2080.png">
+
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.webmanifest">
     <meta name="apple-mobile-web-app-title" content="早餐點餐">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#ff6b6b">
 
-    <style>
-        :root {
-            --primary-color: #ff6b6b;
-            --bg-color: #fcfcfc;
-            --text-dark: #2d3436;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            margin: 0;
-            padding: 10px;
-        }
-
-        header { text-align: center; padding: 15px 0; }
-        h1 { font-size: 1.2rem; margin: 0; color: var(--primary-color); }
-
-        /* 首頁 2 欄佈局 */
-        #app {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        /* 簡潔版卡片 */
-        .card {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-            cursor: pointer;
-        }
-
-        .card-img { width: 100%; height: 110px; object-fit: cover; background: #eee; }
-        .card-name { padding: 10px; font-size: 0.95rem; font-weight: bold; text-align: center; }
-
-        /* 彈窗背景 (Overlay) */
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
-            display: none; /* 預設隱藏 */
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        /* 彈窗內容框 */
-        .modal-content {
-            background: white;
-            width: 100%;
-            max-width: 350px;
-            border-radius: 20px;
-            overflow: hidden;
-            position: relative;
-            animation: fadeIn 0.3s;
-        }
-
-        @keyframes fadeIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
-        .close-btn {
-            position: absolute;
-            top: 10px; left: 10px;
-            width: 30px; height: 30px;
-            background: rgba(255,255,255,0.8);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 20px; font-weight: bold; color: #333;
-            cursor: pointer; z-index: 1001;
-        }
-
-        .modal-img { width: 100%; height: 200px; object-fit: cover; }
-        .modal-body { padding: 20px; }
-        .modal-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 10px; }
-        .modal-info { font-size: 0.9rem; color: #636e72; margin: 8px 0; }
-        
-        .modal-note {
-            background: #fff5f5; padding: 10px; border-radius: 10px;
-            color: #e66767; font-size: 0.85rem; margin-top: 15px;
-            border-left: 4px solid var(--primary-color);
-        }
-
-        .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
-        .btn {
-            padding: 12px; border-radius: 10px; text-align: center;
-            text-decoration: none; font-weight: bold; font-size: 0.9rem;
-        }
-        .btn-call { background: #f1f2f6; color: #2d3436; }
-        .btn-order { background: var(--primary-color); color: white; }
-
-        .loading { grid-column: span 2; text-align: center; padding: 50px; color: #ccc; }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div class="wrap">
+        <header class="top">
+            <h1>00 今天想吃什麼？</h1>
+            <span class="admin-badge">管理模式</span>
+        </header>
 
-    <header>
-        <h1>🍳 00 今天想吃什麼？</h1>
-    </header>
+        <!-- 抽籤區 -->
+        <section id="draw" class="draw" aria-live="polite"></section>
 
-    <div id="app">
-        <div class="loading">正在準備菜單...</div>
-    </div>
-
-    <div id="modal" class="modal-overlay" onclick="closeModal(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <div class="close-btn" onclick="document.getElementById('modal').style.display='none'">×</div>
-            <img id="m-img" class="modal-img" src="" alt="">
-            <div class="modal-body">
-                <div id="m-name" class="modal-title"></div>
-                <div id="m-addr" class="modal-info"></div>
-                <div id="m-phone" class="modal-info"></div>
-                <div id="m-note" class="modal-note"></div>
-                <div class="btn-group">
-                    <a id="m-call-btn" href="" class="btn btn-call">📞 撥打電話</a>
-                    <a id="m-order-btn" href="" target="_blank" class="btn btn-order">📱 線上點餐</a>
-                </div>
+        <!-- 分類 + 切換檢視 -->
+        <div class="toolbar">
+            <div id="chips" class="chips" role="tablist" aria-label="依類型篩選"></div>
+            <div class="view-toggle" role="group" aria-label="切換檢視">
+                <button type="button" data-view="swipe" aria-label="滑動卡片"></button>
+                <button type="button" data-view="grid" aria-label="看全部"></button>
             </div>
         </div>
+
+        <main id="list">
+            <div class="state">正在準備菜單…</div>
+        </main>
+
+        <footer class="foot">
+            <span id="foot-info"></span>
+            <button type="button" id="admin-btn" class="link-btn"></button>
+        </footer>
     </div>
 
-    <script>
-        const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR9V8Aau0g3g-Jrgdsp2rX8yykfl1vQsY62JKBv7mxO91EVuXRcXvDoeFnzle5lMgc96Gl4oG_YJ-Ub/pub?gid=0&single=true&output=csv"; 
-        let breakfastData = [];
+    <button type="button" id="add-btn" class="fab" aria-label="新增店家"></button>
 
-        async function fetchData() {
-            try {
-                const response = await fetch(csvUrl);
-                const csv = await response.text();
-                const rows = csv.split('\n').filter(r => r.trim() !== '');
-                breakfastData = rows.slice(1).map(row => {
-                    const c = row.split(',');
-                    return { name: c[0], img: c[1], phone: c[2], addr: c[3], link: c[4], note: c[5] };
-                });
-                renderCards();
-            } catch (e) { console.error(e); }
-        }
+    <!-- 店家詳細（看全部模式點卡片） -->
+    <dialog id="detail" class="sheet"></dialog>
 
-        function renderCards() {
-            const app = document.getElementById('app');
-            const defImg = "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=300";
-            app.innerHTML = breakfastData.map((item, index) => `
-                <div class="card" onclick="openModal(${index})">
-                    <img class="card-img" src="${item.img?.includes('http') ? item.img : defImg}">
-                    <div class="card-name">${item.name || '美味早餐'}</div>
+    <!-- 管理員登入 -->
+    <dialog id="login" class="sheet small">
+        <form id="login-form" class="pad">
+            <h2 tabindex="-1">進入管理模式</h2>
+            <p class="hint">輸入通關密碼後，就能在網頁上新增、修改店家。</p>
+            <input id="login-pw" type="password" autocomplete="current-password" placeholder="通關密碼" required>
+            <p id="login-err" class="err"></p>
+            <div class="row-btns">
+                <button type="button" class="btn" data-close>取消</button>
+                <button type="submit" class="btn primary">進入</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- 新增／修改店家 -->
+    <dialog id="editor" class="sheet tall">
+        <form id="edit-form" novalidate>
+            <div class="sheet-head">
+                <button type="button" class="icon-btn" data-close aria-label="取消"></button>
+                <h2 id="edit-title" tabindex="-1" autofocus>新增店家</h2>
+                <button type="submit" class="btn primary sm" id="save-btn">儲存</button>
+            </div>
+            <div class="pad form">
+                <label class="photo-pick">
+                    <input type="file" id="f-file" accept="image/*" hidden>
+                    <img id="f-preview" alt="" hidden>
+                    <span class="photo-pick-label"></span>
+                </label>
+                <input id="f-img" type="url" placeholder="或貼上照片網址（https://…）">
+
+                <label class="field"><span>店名<span class="req">必填</span></span>
+                    <input id="f-name" maxlength="60" placeholder="例：向晨蛋餅專賣店">
+                </label>
+                <label class="field">電話
+                    <input id="f-phone" type="tel" maxlength="30" placeholder="例：02 2788 3965">
+                </label>
+                <label class="field">地址
+                    <input id="f-addr" maxlength="120" placeholder="例：115臺北市南港區昆陽街151號">
+                </label>
+                <label class="field">線上點餐網址
+                    <input id="f-link" type="url" maxlength="500" placeholder="https://…">
+                </label>
+                <label class="field">00 愛吃什麼
+                    <textarea id="f-note" rows="2" maxlength="200" placeholder="例：蔥蛋雙蛋蛋餅、蔬菜酥皮蛋餅"></textarea>
+                </label>
+
+                <div class="field">類型
+                    <div id="f-types" class="chips wrap-chips"></div>
+                    <div class="inline-add">
+                        <input id="f-newtype" maxlength="10" placeholder="新類型，例：鐵板麵">
+                        <button type="button" class="btn sm" id="f-addtype">加入</button>
+                    </div>
                 </div>
-            `).join('');
-        }
 
-        function openModal(index) {
-            const item = breakfastData[index];
-            const defImg = "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=500";
-            
-            document.getElementById('m-img').src = item.img?.includes('http') ? item.img : defImg;
-            document.getElementById('m-name').innerText = item.name;
-            document.getElementById('m-addr').innerText = "📍 " + (item.addr || "暫無地址");
-            document.getElementById('m-phone').innerText = "📞 " + (item.phone || "暫無電話");
-            
-            const noteEl = document.getElementById('m-note');
-            if(item.note) { noteEl.innerText = "😋 00愛吃：" + item.note; noteEl.style.display = "block"; }
-            else { noteEl.style.display = "none"; }
+                <div class="field">營業時間
+                    <div class="hours">
+                        <input id="f-open" type="time" aria-label="開門時間">
+                        <span>到</span>
+                        <input id="f-close" type="time" aria-label="打烊時間">
+                    </div>
+                    <div class="sub">公休日</div>
+                    <div id="f-off" class="days"></div>
+                </div>
 
-            // 按鈕顯示逻辑
-            const cBtn = document.getElementById('m-call-btn');
-            if(item.phone) { cBtn.href = "tel:" + item.phone; cBtn.style.display = "block"; }
-            else { cBtn.style.display = "none"; }
+                <p id="edit-err" class="err"></p>
+                <button type="button" id="del-btn" class="btn danger full">刪除這家店</button>
+            </div>
+        </form>
+    </dialog>
 
-            const oBtn = document.getElementById('m-order-btn');
-            if(item.link?.includes('http')) { oBtn.href = item.link; oBtn.style.display = "block"; }
-            else { oBtn.style.display = "none"; }
+    <div id="toast" class="toast" role="status"></div>
 
-            document.getElementById('modal').style.display = 'flex';
-        }
-
-        function closeModal(e) {
-            document.getElementById('modal').style.display = 'none';
-        }
-
-        fetchData();
-    </script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
