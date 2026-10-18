@@ -74,8 +74,8 @@ a { color: inherit; }
 }
 body.admin .admin-badge { display: inline-block; }
 .top-right { display: flex; align-items: center; gap: 8px; }
-.add-btn { display: none; }
-body.admin .add-btn { display: inline-flex; }
+.top .add-btn { display: none; }
+body.admin .top .add-btn { display: inline-flex; }
 
 /* 抽籤結果（下方彈出） */
 .sheet-grip { width: 40px; height: 5px; border-radius: 3px; background: var(--text-3); opacity: 0.45; margin: 10px auto 0; }
