@@ -14,8 +14,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="theme-color" content="#fff9f5">
 
-    <link rel="stylesheet" href="style.css?v=20261020c">
-    <script src="theme.js?v=20261020c"></script>
+    <link rel="stylesheet" href="style.css?v=20261021a">
+    <script src="theme.js?v=20261021a"></script>
 </head>
 <body>
     <div class="wrap">
@@ -55,7 +55,11 @@
 
         <footer class="foot">
             <span id="foot-info"></span>
-            <button type="button" id="admin-btn" class="link-btn"></button>
+            <nav class="foot-links">
+                <button type="button" id="mine-btn" class="link-btn" data-act="mine"></button>
+                <button type="button" id="settings-btn" class="link-btn" data-act="settings"></button>
+                <button type="button" id="admin-btn" class="link-btn"></button>
+            </nav>
         </footer>
     </div>
 
@@ -73,6 +77,12 @@
 
     <!-- 店家詳細（看全部模式點卡片） -->
     <dialog id="detail" class="sheet"></dialog>
+
+    <!-- 我的早餐：今日運勢、早餐週曆、早餐護照 -->
+    <dialog id="mine" class="sheet"></dialog>
+
+    <!-- 設定：日夜模式、主題皮膚、抽籤方式、搖一搖 -->
+    <dialog id="settings" class="sheet"></dialog>
 
     <!-- 管理員登入 -->
     <dialog id="login" class="sheet small">
@@ -146,7 +156,7 @@
 
     <div id="toast" class="toast" role="status"></div>
 
-    <script src="config.js?v=20261020c"></script>
-    <script src="app.js?v=20261020c"></script>
+    <script src="config.js?v=20261021a"></script>
+    <script src="app.js?v=20261021a"></script>
 </body>
 </html>

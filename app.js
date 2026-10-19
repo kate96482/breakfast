@@ -10,6 +10,11 @@
     const EAT_KEY = 'breakfast-eaten';
     const DAY_MS = 24 * 3600 * 1000;
     const THEME = window.BreakfastTheme;
+    const LOG_KEY = 'breakfast-log';
+    const PASS_KEY = 'breakfast-passport';
+    const METHOD_KEY = 'breakfast-method';
+    const SHAKE_KEY = 'breakfast-shake';
+    const FORTUNE_KEY = 'breakfast-fortune-day';
 
     // 試算表標題（第一列）↔ 欄位，和 apps-script/Code.gs 一致
     const FIELDS = {
@@ -41,6 +46,16 @@
         'sun': '<path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7"/>',
         'moon': '<path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/>',
         'brightness-half': '<path d="M12 9a3 3 0 0 0 0 6v-6z"/><path d="M6 6h3.5l2.5 -2.5l2.5 2.5h3.5v3.5l2.5 2.5l-2.5 2.5v3.5h-3.5l-2.5 2.5l-2.5 -2.5h-3.5v-3.5l-2.5 -2.5l2.5 -2.5z"/>',
+        'egg': '<path d="M19 14.083c0 4.154 -2.966 6.74 -7 6.917c-4.2 0 -7 -2.763 -7 -6.917c0 -5.538 3.5 -11.09 7 -11.083c3.5 .007 7 5.545 7 11.083z"/>',
+        'burger': '<path d="M4 15h16a4 4 0 0 1 -4 4h-8a4 4 0 0 1 -4 -4z"/><path d="M12 4c3.783 0 6.953 2.133 7.786 5h-15.572c.833 -2.867 4.003 -5 7.786 -5z"/><path d="M5 12h14"/>',
+        'bread': '<path d="M18 4a3 3 0 0 1 2 5.235v8.765a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-8.764a3 3 0 0 1 1.824 -5.231h12.176v-.005z"/>',
+        'coffee': '<path d="M3 14c.83 .642 2.077 1.017 3.5 1c1.423 .017 2.67 -.358 3.5 -1c.83 -.642 2.077 -1.017 3.5 -1c1.423 -.017 2.67 .358 3.5 1"/><path d="M8 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2"/><path d="M12 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2"/><path d="M3 10h14v5a6 6 0 0 1 -6 6h-2a6 6 0 0 1 -6 -6v-5z"/><path d="M16.746 16.726a3 3 0 1 0 .252 -5.555"/>',
+        'soup': '<path d="M4 11h16a1 1 0 0 1 1 1v.5c0 1.5 -2.517 5.573 -4 6.5v1a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1v-1c-1.687 -1.054 -4 -5 -4 -6.5v-.5a1 1 0 0 1 1 -1z"/><path d="M12 4a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2"/><path d="M16 4a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2"/><path d="M8 4a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2"/>',
+        'bowl': '<path d="M4 8h16a1 1 0 0 1 1 1v.5c0 1.5 -2.517 5.573 -4 6.5v1a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1v-1c-1.687 -1.054 -4 -5 -4 -6.5v-.5a1 1 0 0 1 1 -1z"/>',
+        'building-store': '<path d="M3 21l18 0"/><path d="M3 7v1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1h-18l2 -4h14l2 4"/><path d="M5 21l0 -10.15"/><path d="M19 21l0 -10.15"/><path d="M9 21v-4a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v4"/>',
+        'notebook': '<path d="M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-11a1 1 0 0 1 -1 -1v-14a1 1 0 0 1 1 -1m3 0v18"/><path d="M13 8l2 0"/><path d="M13 12l2 0"/>',
+        'trophy': '<path d="M8 21l8 0"/><path d="M12 17l0 4"/><path d="M7 4l10 0"/><path d="M17 4v8a5 5 0 0 1 -10 0v-8"/><path d="M5 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M19 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>',
+        'settings': '<path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/>',
         'tools-kitchen-2': '<path d="M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3"/>',
     };
     const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -59,6 +74,8 @@
 
     const state = {
         eaten: readEaten(),   // { 店家 id: 最後一次吃的時間 }，只存在這支手機
+        log: readLog(),       // 週曆用：[[店家 id, 時間], …]
+        passport: readPassport(), // 護照用：{ 店家 id: 第一次吃的時間 }
         quip: false,          // 荷包蛋正在說悄悄話
         items: [],
         loaded: false,
@@ -289,9 +306,47 @@
 
     const recentlyEaten = (id) => { const d = eatenAgo(id); return d != null && d <= 1; };
 
+    function readLog() {
+        try {
+            const raw = storage.get(LOG_KEY);
+            if (raw == null) {
+                // 第一次：把之前「最近吃過」的紀錄帶過來
+                const eaten = readEaten();
+                return Object.keys(eaten).map((id) => [id, eaten[id]]);
+            }
+            const now = Date.now();
+            return (JSON.parse(raw) || []).filter((e) => Array.isArray(e) && now - e[1] < 400 * DAY_MS);
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function readPassport() {
+        try {
+            const raw = storage.get(PASS_KEY);
+            return raw == null ? Object.assign({}, readEaten()) : (JSON.parse(raw) || {});
+        } catch (e) {
+            return {};
+        }
+    }
+
     function markEaten(id) {
-        state.eaten[id] = Date.now();
+        const now = Date.now();
+        state.eaten[id] = now;
         storage.set(EAT_KEY, JSON.stringify(state.eaten));
+        // 週曆：同一家同一天只記一次
+        const dayStart = new Date();
+        dayStart.setHours(0, 0, 0, 0);
+        if (!state.log.some(([i, t]) => i === id && t >= dayStart.getTime())) {
+            state.log.push([id, now]);
+            state.log = state.log.filter(([, t]) => now - t < 400 * DAY_MS).slice(-300);
+            storage.set(LOG_KEY, JSON.stringify(state.log));
+        }
+        // 護照：第一次吃才蓋章
+        if (!state.passport[id]) {
+            state.passport[id] = now;
+            storage.set(PASS_KEY, JSON.stringify(state.passport));
+        }
         const key = CSS.escape(id);
         document.querySelectorAll(`[data-last="${key}"]`).forEach((el) => { el.textContent = '上次吃：今天'; });
         document.querySelectorAll(`[data-pill="${key}"]`).forEach((el) => { el.textContent = '今天吃過'; });
@@ -299,6 +354,50 @@
         const item = findItem(id);
         // 彈出視窗開著的時候，提示訊息會被蓋住，就不顯示
         if (item && !document.querySelector('dialog[open]')) toast(`已記下：今天吃「${item.name}」`);
+    }
+
+    /* ---------- 今日運勢、早餐週曆 ---------- */
+
+    const hash = (str) => {
+        let h = 2166136261;
+        for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+        return h >>> 0;
+    };
+    const dayKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const WEEK_MON = '一二三四五六日';
+    const FORTUNE_TEXT = { 5: '今天超順！想吃什麼都對', 4: '運氣不錯，照直覺選就好', 3: '平平順順，吃飽最重要', 2: '低調一點，吃熟悉的最安心' };
+    const TYPE_ICON = { 蛋餅: 'egg', 漢堡: 'burger', 早午餐: 'bread', 飯糰: 'bowl', 中式: 'soup', 超商: 'building-store', 飲料: 'coffee' };
+    const typeIcon = (item) => { const t = item.types.find((x) => TYPE_ICON[x]); return t ? TYPE_ICON[t] : 'tools-kitchen-2'; };
+
+    // 同一天結果固定：用日期當種子，所以一天內重開幾次都一樣
+    function fortune(now = new Date()) {
+        if (!state.items.length) return null;
+        const seed = hash(`fortune-${dayKey(now)}`);
+        const stars = [2, 3, 3, 4, 4, 5][seed % 6];
+        const types = [...new Set(state.items.flatMap((it) => it.types))].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+        const type = types.length ? types[(seed >>> 3) % types.length] : '';
+        const pool = (type ? state.items.filter((it) => it.types.includes(type)) : state.items.slice()).sort((a, b) => (a.id < b.id ? -1 : 1));
+        return { stars, type, shop: pool[(seed >>> 7) % pool.length] };
+    }
+
+    // 這週（週一開始）每一天的 00:00
+    function weekDays(now = new Date()) {
+        const today = new Date(now);
+        today.setHours(0, 0, 0, 0);
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+        return Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            return d;
+        });
+    }
+
+    function logsOn(day) {
+        const start = day.getTime();
+        const end = new Date(day);
+        end.setDate(end.getDate() + 1);
+        return state.log.filter(([, t]) => t >= start && t < end.getTime()).sort((a, b) => a[1] - b[1]);
     }
 
     /* ---------- 篩選與抽籤 ---------- */
@@ -346,6 +445,34 @@
         await sleep(950);
     }
 
+    // 抽籤方式：吐司機、扭蛋機、每次隨機
+    const getMethod = () => { const v = storage.get(METHOD_KEY); return v === 'gacha' || v === 'random' ? v : 'toaster'; };
+    const pickMethod = () => { const m = getMethod(); return m === 'random' ? (Math.random() < 0.5 ? 'toaster' : 'gacha') : m; };
+    const drawAnimation = (dlg, method) => (method === 'gacha' ? gachaAnimation(dlg) : toasterAnimation(dlg));
+
+    async function gachaAnimation(dlg) {
+        dlg.innerHTML = `
+            <div class="sheet-grip"></div>
+            <div class="pick rolling">
+                <p class="pick-label">轉轉看會掉出什麼…</p>
+                <div class="gacha" aria-hidden="true">
+                    <div class="g-dome"><i></i><i></i><i></i><i></i><i></i></div>
+                    <div class="g-base"><i class="g-knob"></i></div>
+                    <div class="g-chute"></div>
+                    <div class="g-capsule"><i class="g-top"></i><i class="g-bot"></i></div>
+                </div>
+                <h2 class="pick-name" tabindex="-1" autofocus>&nbsp;</h2>
+            </div>`;
+        const gacha = dlg.querySelector('.gacha');
+        await sleep(300);
+        gacha.classList.add('spin');
+        await sleep(700);
+        gacha.classList.add('drop');
+        await sleep(600);
+        gacha.classList.add('open');
+        await sleep(450);
+    }
+
     function celebrate(dlg) {
         if (reduceMotion()) return;
         // 震動只有 Android 有感，iPhone 的 Safari 不支援
@@ -380,7 +507,7 @@
 
         if (list.length > 1 && !reduceMotion()) {
             state.rolling = true;
-            await toasterAnimation(dlg);
+            await drawAnimation(dlg, pickMethod());
             state.rolling = false;
             if (!dlg.open) return; // 烤的時候被關掉了
         }
@@ -609,6 +736,210 @@
     function renderFoot() {
         $('#foot-info').textContent = state.loaded ? `共 ${state.items.length} 家早餐店` : '';
         $('#admin-btn').innerHTML = isAdmin() ? '離開管理模式' : `${icon('lock')} 管理`;
+        $('#mine-btn').innerHTML = `${icon('notebook')} 我的早餐`;
+        $('#settings-btn').innerHTML = `${icon('settings')} 設定`;
+    }
+
+    /* ---------- 搖一搖抽籤 ---------- */
+
+    const shakeCapable = () => 'DeviceMotionEvent' in window && matchMedia('(pointer: coarse)').matches;
+    const isShakeOn = () => storage.get(SHAKE_KEY) === '1';
+    let lastMotion = null;
+    let spikes = [];
+    let lastShake = 0;
+
+    // 1 秒內晃 3 次以上才算搖，走路或拿起手機不會觸發；抽籤面板、設定面板開著的時候也不觸發
+    function onMotion(e) {
+        const a = e.accelerationIncludingGravity;
+        if (!a || a.x == null) return;
+        const cur = [a.x, a.y, a.z];
+        if (lastMotion) {
+            const now = Date.now();
+            const delta = Math.abs(cur[0] - lastMotion[0]) + Math.abs(cur[1] - lastMotion[1]) + Math.abs(cur[2] - lastMotion[2]);
+            if (delta > 28) spikes.push(now);
+            spikes = spikes.filter((t) => now - t < 1000);
+            if (spikes.length >= 3 && now - lastShake > 2500) {
+                spikes = [];
+                lastShake = now;
+                if (!document.hidden && state.loaded && !state.rolling && !document.querySelector('dialog[open]')) doDraw();
+            }
+        }
+        lastMotion = cur;
+    }
+
+    function startShake() {
+        stopShake();
+        window.addEventListener('devicemotion', onMotion);
+    }
+
+    function stopShake() {
+        window.removeEventListener('devicemotion', onMotion);
+        lastMotion = null;
+        spikes = [];
+    }
+
+    // iPhone 要在「點一下」的當下請求動作感應權限，所以這裡不能先 await 別的東西
+    async function setShake(on) {
+        if (!on) {
+            storage.set(SHAKE_KEY, null);
+            stopShake();
+            return true;
+        }
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            try {
+                if ((await DeviceMotionEvent.requestPermission()) !== 'granted') return false;
+            } catch (e) {
+                return false;
+            }
+        }
+        storage.set(SHAKE_KEY, '1');
+        startShake();
+        return true;
+    }
+
+    async function toggleShake() {
+        const on = isShakeOn();
+        if (!on && !shakeCapable()) {
+            $('#shake-note').textContent = '這台裝置沒有動作感應，用手機才能使用。';
+            return;
+        }
+        const ok = await setShake(!on);
+        renderSettings();
+        if (!ok) $('#shake-note').textContent = '沒有取得動作感應的權限。iPhone 可以到「設定 > Safari > 動作與方向」開啟後再試。';
+    }
+
+    /* ---------- 我的早餐：今日運勢、早餐週曆、早餐護照 ---------- */
+
+    const STAR = '<path d="M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z"/>';
+    const starsHtml = (n) => Array.from({ length: 5 }, (_, i) => `<svg class="star${i < n ? ' on' : ''}" viewBox="0 0 24 24" aria-hidden="true">${STAR}</svg>`).join('');
+
+    function mineHtml() {
+        const now = new Date();
+        const f = fortune(now);
+        const days = weekDays(now);
+        const todayStart = new Date(now);
+        todayStart.setHours(0, 0, 0, 0);
+
+        const weekIds = new Set();
+        const strip = days.map((day, i) => {
+            const logs = logsOn(day);
+            logs.forEach(([id]) => { if (findItem(id)) weekIds.add(id); });
+            const first = logs.map(([id]) => findItem(id)).find(Boolean);
+            return `<div class="wk-day${day.getTime() === todayStart.getTime() ? ' today' : ''}">
+                <span class="wk-lbl">${WEEK_MON[i]}</span>
+                <span class="wk-dot${first ? ' done' : ''}">${first ? icon(typeIcon(first)) : ''}</span>
+                <small>${logs.length > 1 ? `+${logs.length - 1}` : ''}</small></div>`;
+        }).join('');
+        const rows = days.map((day, i) => {
+            const names = logsOn(day).map(([id]) => findItem(id)).filter(Boolean).map((it) => esc(it.name));
+            return names.length ? `<li><b>週${WEEK_MON[i]}</b>${names.join('、')}</li>` : '';
+        }).join('');
+
+        const total = state.items.length;
+        const stamped = state.items.filter((it) => state.passport[it.id]).length;
+        const stamps = state.items.map((it) => {
+            const on = !!state.passport[it.id];
+            return `<button type="button" class="stamp${on ? ' on' : ''}" data-act="detail" data-id="${esc(it.id)}" aria-label="${esc(it.name)}${on ? '，已吃過' : '，還沒吃過'}">
+                <span class="stamp-dot">${icon(on ? 'check' : typeIcon(it))}</span>
+                <span class="stamp-name">${esc(it.name.split(/\s/)[0])}</span></button>`;
+        }).join('');
+
+        return `
+            <div class="sheet-head">
+                <h2 tabindex="-1" autofocus>我的早餐</h2>
+                <button type="button" class="icon-btn" data-close aria-label="關閉">${icon('x')}</button>
+            </div>
+            <div class="pad mine">
+                ${f ? `<section class="fortune">
+                    <div class="fortune-head"><span>今日運勢</span><span class="stars" role="img" aria-label="${f.stars} 顆星">${starsHtml(f.stars)}</span></div>
+                    <p>${FORTUNE_TEXT[f.stars]}</p>
+                    ${f.type ? `<div class="lucky"><span>幸運品項</span><b>${esc(f.type)}</b></div>` : ''}
+                    <div class="lucky"><span>幸運店家</span><b>${esc(f.shop.name)}</b></div>
+                    <button type="button" class="btn" data-act="detail" data-id="${esc(f.shop.id)}">看看這家</button>
+                </section>` : ''}
+                <section>
+                    <h3>早餐週曆<small>${weekIds.size ? `這週吃了 ${weekIds.size} 家` : '這週還沒記錄'}</small></h3>
+                    <div class="wk">${strip}</div>
+                    ${rows ? `<ul class="wk-list">${rows}</ul>` : '<p class="hint">按了「電話」或「點餐」，就會記在這裡。</p>'}
+                </section>
+                <section>
+                    <h3>早餐護照<small>已吃過 ${stamped} / ${total} 家</small></h3>
+                    ${total >= 3 && stamped === total ? `<div class="complete">${icon('trophy')}集滿了！${total} 家早餐店都吃過一輪</div>` : ''}
+                    <div class="stamps">${stamps}</div>
+                </section>
+                <p class="hint">這些紀錄只存在這支手機，換手機或清除瀏覽資料就會消失。</p>
+            </div>`;
+    }
+
+    function openMine() {
+        const dlg = $('#mine');
+        dlg.innerHTML = mineHtml();
+        dlg.showModal();
+        dlg.scrollTop = 0;
+    }
+
+    /* ---------- 設定：日夜模式、主題皮膚、抽籤方式、搖一搖 ---------- */
+
+    const SKIN_INFO = {
+        egg: { name: '荷包蛋', l: ['#fff9f5', '#c93232'], d: ['#17181a', '#ff6b6b'] },
+        matcha: { name: '抹茶', l: ['#f6fbf5', '#2f7a45'], d: ['#151a16', '#7bc68d'] },
+        milktea: { name: '奶茶', l: ['#fbf6f1', '#8a5a3c'], d: ['#1a1714', '#d9a77c'] },
+        blueberry: { name: '藍莓', l: ['#f8f7ff', '#5a4fc7'], d: ['#16151d', '#a69bff'] },
+    };
+
+    function settingsHtml() {
+        const mode = THEME.get();
+        const skin = THEME.getSkin();
+        const method = getMethod();
+        const shakeOn = isShakeOn();
+        const seg = (act, current, options) => `<div class="seg" role="group">${options.map(([v, label]) =>
+            `<button type="button" class="${v === current ? 'on' : ''}" data-act="${act}" data-v="${v}" aria-pressed="${v === current}">${label}</button>`).join('')}</div>`;
+        const shakeNote = shakeOn
+            ? '已開啟：在主畫面搖一搖手機就會抽。搖不動的話，關掉再開一次。'
+            : shakeCapable()
+                ? '開啟後，在主畫面搖一搖手機就會抽籤。iPhone 第一次會問你要不要允許動作感應。'
+                : '這台裝置沒有動作感應，用手機才能使用。';
+        return `
+            <div class="sheet-head">
+                <h2 tabindex="-1" autofocus>設定</h2>
+                <button type="button" class="icon-btn" data-close aria-label="關閉">${icon('x')}</button>
+            </div>
+            <div class="pad settings">
+                <section>
+                    <h3>日夜模式</h3>
+                    ${seg('set-mode', mode, [['auto', '自動'], ['day', '白天'], ['night', '夜間']])}
+                    <p class="hint">自動：18:00 到隔天 05:00 用夜間。首頁右上角的按鈕也可以快速切換。</p>
+                </section>
+                <section>
+                    <h3>主題皮膚</h3>
+                    <div class="skins">${THEME.SKINS.map((k) => {
+                        const info = SKIN_INFO[k];
+                        return `<button type="button" class="skin${k === skin ? ' on' : ''}" data-act="set-skin" data-v="${k}" aria-pressed="${k === skin}">
+                            <span class="skin-sw"><span style="background:${info.l[0]}"><i style="background:${info.l[1]}"></i></span><span style="background:${info.d[0]}"><i style="background:${info.d[1]}"></i></span></span>
+                            <span class="skin-name">${info.name}</span></button>`;
+                    }).join('')}</div>
+                </section>
+                <section>
+                    <h3>抽籤方式</h3>
+                    ${seg('set-method', method, [['toaster', '吐司機'], ['gacha', '扭蛋機'], ['random', '每次隨機']])}
+                </section>
+                <section>
+                    <h3>搖一搖</h3>
+                    <button type="button" class="row-switch" role="switch" aria-checked="${shakeOn}" data-act="toggle-shake"><span>搖一搖抽籤</span><i class="switch"></i></button>
+                    <p class="hint" id="shake-note">${shakeNote}</p>
+                </section>
+            </div>`;
+    }
+
+    function renderSettings() {
+        $('#settings').innerHTML = settingsHtml();
+    }
+
+    function openSettings() {
+        renderSettings();
+        const dlg = $('#settings');
+        dlg.showModal();
+        dlg.scrollTop = 0;
     }
 
     /* ---------- 荷包蛋夥伴與日夜模式 ---------- */
@@ -654,9 +985,18 @@
         void egg.offsetWidth;
         egg.classList.add('wiggle');
         state.quip = true;
-        $('#bubble').textContent = QUIPS[Math.floor(Math.random() * QUIPS.length)];
+        // 每天第一次戳，先說今日運勢；之後才是隨機的悄悄話
+        const f = storage.get(FORTUNE_KEY) !== dayKey() ? fortune() : null;
+        let ms = 2800;
+        if (f && f.shop) {
+            storage.set(FORTUNE_KEY, dayKey());
+            $('#bubble').textContent = `今日運勢 ${'★'.repeat(f.stars)}${'☆'.repeat(5 - f.stars)}　幸運店家：${f.shop.name}`;
+            ms = 4800;
+        } else {
+            $('#bubble').textContent = QUIPS[Math.floor(Math.random() * QUIPS.length)];
+        }
         clearTimeout(quipTimer);
-        quipTimer = setTimeout(() => { state.quip = false; renderHero(); }, 2800);
+        quipTimer = setTimeout(() => { state.quip = false; renderHero(); }, ms);
     }
 
     const MODE_TEXT = { auto: '自動：18:00 後轉夜間', day: '固定白天', night: '固定夜間' };
@@ -1026,6 +1366,9 @@
         $('#draw-btn').innerHTML = `${icon('dice-5')}幫我抽一家`;
         enableSwipeClose($('#pick'));
         enableSwipeClose($('#detail'));
+        enableSwipeClose($('#mine'));
+        enableSwipeClose($('#settings'));
+        if (isShakeOn()) startShake();
         $('#editor [data-close]').innerHTML = icon('x');
 
         document.addEventListener('click', (e) => {
@@ -1059,6 +1402,15 @@
                 case 'copy': copyNote(el, id); break;
                 case 'theme': cycleTheme(); break;
                 case 'egg': pokeEgg(); break;
+                case 'mine': openMine(); break;
+                case 'settings': openSettings(); break;
+                case 'set-mode': THEME.set(el.dataset.v); refreshTheme(); renderSettings(); break;
+                case 'set-skin': THEME.setSkin(el.dataset.v); refreshTheme(); renderSettings(); break;
+                case 'set-method':
+                    storage.set(METHOD_KEY, el.dataset.v === 'toaster' ? null : el.dataset.v);
+                    renderSettings();
+                    break;
+                case 'toggle-shake': toggleShake(); break;
                 default: break;
             }
         });

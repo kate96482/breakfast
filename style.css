@@ -50,6 +50,14 @@
     color-scheme: dark;
 }
 
+/* 主題皮膚（白天與夜間各一組）。:not / 屬性選擇器是為了讓皮膚的優先順序高於上面的白天、夜間底色 */
+:root[data-skin="matcha"]:not([data-theme="dark"]) { --primary-color: #2f7a45; --primary-dark: #24613a; --on-primary: #ffffff; --primary-soft: #e8f4ea; --primary-text: #276138; --bg-color: #f6fbf5; --sky: #dff0d8; }
+:root[data-skin="matcha"][data-theme="dark"] { --primary-color: #7bc68d; --primary-dark: #9fdcae; --on-primary: #10261a; --primary-soft: #1f3326; --primary-text: #9fdcae; --bg-color: #151a16; --sky: #1e3a36; }
+:root[data-skin="milktea"]:not([data-theme="dark"]) { --primary-color: #8a5a3c; --primary-dark: #6f452c; --on-primary: #ffffff; --primary-soft: #f6ebe2; --primary-text: #744a2f; --bg-color: #fbf6f1; --sky: #f1dfcc; }
+:root[data-skin="milktea"][data-theme="dark"] { --primary-color: #d9a77c; --primary-dark: #e8c4a4; --on-primary: #241810; --primary-soft: #3a2e25; --primary-text: #e8c4a4; --bg-color: #1a1714; --sky: #352c3d; }
+:root[data-skin="blueberry"]:not([data-theme="dark"]) { --primary-color: #5a4fc7; --primary-dark: #4a40b0; --on-primary: #ffffff; --primary-soft: #ecebfc; --primary-text: #4a40b0; --bg-color: #f8f7ff; --sky: #e1ddfb; }
+:root[data-skin="blueberry"][data-theme="dark"] { --primary-color: #a69bff; --primary-dark: #c4bcff; --on-primary: #1b1740; --primary-soft: #2c2a52; --primary-text: #c4bcff; --bg-color: #16151d; --sky: #2b2a5a; }
+
 * { box-sizing: border-box; }
 
 body {
@@ -146,12 +154,33 @@ body.admin .top .add-btn { display: inline-flex; }
 .toaster-base { position: absolute; left: 50%; margin-left: -70px; bottom: 16px; width: 140px; height: 12px; background: #7e848c; border-radius: 6px; }
 .toaster-lever {
     position: absolute; left: 50%; margin-left: 64px; bottom: 52px; width: 12px; height: 34px;
-    background: #c93232; border-radius: 6px; transition: transform 0.3s;
+    background: var(--primary-color); border-radius: 6px; transition: transform 0.3s;
 }
 .toaster.press .toast-slice { transform: none; }
 .toaster.press .toaster-lever { transform: translateY(24px); }
 .toaster.pop .toaster-lever { transform: none; }
 .toaster.pop .toast-slice { transform: translateY(-78px); }
+
+/* 扭蛋機：轉把手，膠囊掉出來打開 */
+.gacha { position: relative; width: 220px; height: 250px; margin: 0 auto; }
+.g-dome { position: absolute; left: 50%; margin-left: -62px; top: 0; width: 124px; height: 124px; border-radius: 50%; border: 3px solid var(--text-3); background: var(--surface-2); }
+.g-dome i { position: absolute; width: 24px; height: 24px; border-radius: 50%; }
+.g-dome i:nth-child(1) { left: 18px; top: 30px; background: #c93232; }
+.g-dome i:nth-child(2) { left: 56px; top: 64px; background: #378add; }
+.g-dome i:nth-child(3) { left: 78px; top: 24px; background: #ef9f27; }
+.g-dome i:nth-child(4) { left: 28px; top: 72px; background: #1d9e75; }
+.g-dome i:nth-child(5) { left: 72px; top: 78px; background: #7f77dd; }
+.g-base { position: absolute; left: 50%; margin-left: -76px; top: 108px; width: 152px; height: 92px; background: var(--primary-color); border-radius: 14px; }
+.g-knob { position: absolute; left: 50%; margin-left: -20px; top: 14px; width: 40px; height: 40px; border-radius: 50%; background: #fff; transition: transform 0.8s; }
+.g-knob::after { content: ""; position: absolute; left: 5px; right: 5px; top: 50%; height: 6px; margin-top: -3px; border-radius: 3px; background: var(--primary-color); }
+.g-chute { position: absolute; left: 50%; margin-left: -26px; top: 168px; width: 52px; height: 32px; background: rgba(0, 0, 0, 0.45); border-radius: 6px 6px 0 0; }
+.g-capsule { position: absolute; left: 50%; margin-left: -16px; top: 160px; width: 32px; height: 32px; opacity: 0; transition: transform 0.6s cubic-bezier(0.5, 0, 0.8, 0.6), opacity 0.2s; }
+.g-top { position: absolute; left: 0; top: 0; width: 32px; height: 16px; background: #ef9f27; border-radius: 16px 16px 0 0; transition: transform 0.5s; }
+.g-bot { position: absolute; left: 0; top: 16px; width: 32px; height: 16px; background: #fff; border: 1px solid #ccc; border-radius: 0 0 16px 16px; transition: transform 0.5s; }
+.gacha.spin .g-knob { transform: rotate(540deg); }
+.gacha.drop .g-capsule { opacity: 1; transform: translateY(54px); }
+.gacha.open .g-top { transform: translateY(-10px) rotate(-25deg); }
+.gacha.open .g-bot { transform: translateY(6px) rotate(12deg); }
 
 /* 抽中時的彩帶 */
 .confetti { position: absolute; left: 0; right: 0; top: 0; height: 100%; overflow: hidden; pointer-events: none; z-index: 5; }
@@ -320,9 +349,11 @@ body.admin .edit-fab { display: flex; }
 
 /* 頁尾 */
 .foot {
-    display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;
-    color: var(--text-3); font-size: 0.82rem; padding: 28px 0 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    color: var(--text-3); font-size: 0.82rem; padding: 24px 0 24px;
 }
+.foot-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+.foot-links .link-btn { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; padding: 4px 12px; }
 
 /* 底部操作列 */
 .bottom-bar {
@@ -406,6 +437,60 @@ textarea { resize: vertical; }
 .days button.on { background: var(--text-2); color: var(--surface); border-color: transparent; }
 .err { color: var(--err); font-size: 0.85rem; margin: 0; min-height: 0; }
 .err:empty { display: none; }
+
+/* 設定面板 */
+.settings, .mine { display: flex; flex-direction: column; gap: 22px; }
+.settings h3, .mine h3 { margin: 0 0 10px; font-size: 0.92rem; color: var(--text-2); display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.settings h3 small, .mine h3 small { font-size: 0.82rem; font-weight: normal; color: var(--text-3); }
+.settings .hint, .mine .hint { margin: 8px 0 0; font-size: 0.82rem; color: var(--text-3); line-height: 1.6; }
+.seg { display: flex; background: var(--surface-2); border-radius: 12px; padding: 4px; gap: 2px; }
+.seg button { flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--text-2); font-weight: bold; font-size: 0.9rem; }
+.seg button.on { background: var(--surface); color: var(--primary-color); box-shadow: var(--shadow); }
+.skins { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.skin { padding: 0; border: 2px solid transparent; border-radius: 14px; overflow: hidden; background: var(--surface-2); text-align: center; }
+.skin.on { border-color: var(--primary-color); }
+.skin-sw { display: flex; height: 46px; }
+.skin-sw span { flex: 1; display: flex; align-items: center; justify-content: center; }
+.skin-sw i { width: 24px; height: 12px; border-radius: 6px; }
+.skin-name { display: block; font-size: 0.82rem; padding: 7px 0; color: var(--text-2); }
+.skin.on .skin-name { color: var(--primary-color); font-weight: bold; }
+.row-switch {
+    width: 100%; min-height: 56px; padding: 8px 14px; border: 0; border-radius: 12px; background: var(--surface-2);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: bold; font-size: 0.95rem; color: var(--text-dark);
+}
+.switch { position: relative; flex: none; width: 52px; height: 32px; border-radius: 16px; background: var(--text-3); transition: background 0.2s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+.row-switch[aria-checked="true"] .switch { background: var(--primary-color); }
+.row-switch[aria-checked="true"] .switch::after { transform: translateX(20px); }
+
+.fortune { background: var(--primary-soft); color: var(--primary-text); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.fortune-head { display: flex; align-items: center; justify-content: space-between; font-weight: bold; }
+.stars { display: flex; gap: 2px; }
+.star { width: 22px; height: 22px; fill: none; stroke: var(--primary-text); stroke-width: 1.6; stroke-linejoin: round; opacity: 0.55; }
+.star.on { fill: #ef9f27; stroke: #ef9f27; opacity: 1; }
+.fortune p { margin: 0; font-size: 0.9rem; }
+.lucky { display: flex; gap: 10px; font-size: 0.9rem; }
+.lucky span { flex: none; width: 4.5em; opacity: 0.85; }
+.lucky b { min-width: 0; }
+.fortune .btn { margin-top: 4px; }
+
+.wk { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.wk-day { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.wk-lbl { font-size: 0.82rem; color: var(--text-3); }
+.wk-day.today .wk-lbl { color: var(--primary-color); font-weight: bold; }
+.wk-dot { width: 100%; max-width: 42px; aspect-ratio: 1; border-radius: 50%; border: 1px dashed var(--text-3); color: var(--text-3); display: flex; align-items: center; justify-content: center; }
+.wk-dot.done { border: 0; background: var(--primary-soft); color: var(--primary-text); }
+.wk-day.today .wk-dot { border: 2px solid var(--primary-color); }
+.wk-day.today .wk-dot.done { border: 2px solid var(--primary-color); }
+.wk-day small { font-size: 0.78rem; color: var(--text-3); min-height: 1em; }
+.wk-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; color: var(--text-2); line-height: 1.5; }
+.wk-list b { margin-right: 8px; color: var(--text-dark); }
+.stamps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 6px; }
+.stamp { min-height: 44px; padding: 4px 0; border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.stamp-dot { width: 48px; height: 48px; border-radius: 50%; border: 1px dashed var(--text-3); color: var(--text-3); display: flex; align-items: center; justify-content: center; }
+.stamp.on .stamp-dot { border: 0; background: var(--primary-color); color: var(--on-primary); }
+.stamp-name { max-width: 100%; font-size: 0.78rem; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.complete { display: flex; align-items: center; gap: 10px; background: var(--primary-soft); color: var(--primary-text); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-weight: bold; font-size: 0.9rem; }
 
 /* 提示訊息 */
 .toast {
