@@ -16,6 +16,9 @@
     const SHAKE_KEY = 'breakfast-shake';
     const FORTUNE_KEY = 'breakfast-fortune-day';
     const PIN_KEY = 'breakfast-pin';
+    const CACHE_TIME_KEY = 'breakfast-cache-time';
+    const LIB = window.BreakfastLib;
+    const REMINDER_HOUR = 7; // 「加到行事曆」的提醒時間
 
     // 試算表標題（第一列）↔ 欄位，和 apps-script/Code.gs 一致
     const FIELDS = {
@@ -58,6 +61,8 @@
         'trophy': '<path d="M8 21l8 0"/><path d="M12 17l0 4"/><path d="M7 4l10 0"/><path d="M17 4v8a5 5 0 0 1 -10 0v-8"/><path d="M5 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M19 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>',
         'settings': '<path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/>',
         'bookmark': '<path d="M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4z"/>',
+        'share-2': '<path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1"/><path d="M12 14v-11"/><path d="M9 6l3 -3l3 3"/>',
+        'calendar-plus': '<path d="M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/><path d="M16 19h6"/><path d="M19 16v6"/>',
         'tools-kitchen-2': '<path d="M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3"/>',
     };
     const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -80,6 +85,8 @@
         passport: readPassport(), // 護照用：{ 店家 id: 第一次吃的時間 }
         quip: false,          // 荷包蛋正在說悄悄話
         override: null,       // 手動切換「抽現在／抽明天」，只在這個時段有效
+        updatedAt: 0,         // 目前畫面上的資料是什麼時候抓的
+        stale: false,         // 最近一次更新失敗（例如沒網路），畫面上是舊資料
         items: [],
         loaded: false,
         lastFetch: 0,
@@ -198,7 +205,10 @@
         }
     }
 
-    const writeCache = () => storage.set(CACHE_KEY, JSON.stringify(state.items));
+    const writeCache = () => {
+        storage.set(CACHE_KEY, JSON.stringify(state.items));
+        storage.set(CACHE_TIME_KEY, String(Date.now()));
+    };
 
     // 先顯示上次的資料，再到背景抓最新的
     async function load() {
@@ -206,6 +216,7 @@
         if (cached) {
             state.items = cached;
             state.loaded = true;
+            state.updatedAt = Number(storage.get(CACHE_TIME_KEY)) || 0;
             renderAll();
         }
         try {
@@ -213,10 +224,14 @@
             state.items = items;
             state.loaded = true;
             state.lastFetch = Date.now();
+            state.updatedAt = state.lastFetch;
+            state.stale = false;
             writeCache();
             renderAll();
         } catch (err) {
             console.error(err);
+            state.stale = true;
+            renderFoot();
             if (state.loaded) toast('目前無法更新，先顯示上次的資料');
             else $('#list').innerHTML = `<div class="state">菜單載入失敗了<br><button type="button" class="btn" data-act="retry">再試一次</button></div>`;
         }
@@ -613,7 +628,7 @@
     function pinButtonHtml(id) {
         const pin = readPin();
         const on = !!pin && pin.id === id && pin.day === dayKey(tomorrowDate());
-        return `<button type="button" class="act pin${on ? ' on' : ''}" data-act="pin" data-id="${esc(id)}" aria-pressed="${on}">${icon('bookmark')}${on ? '已記住，明早提醒你（點一下取消）' : '記住這家，明早提醒我'}</button>`;
+        return `<button type="button" class="act pin${on ? ' on' : ''}" data-act="pin" data-id="${esc(id)}" aria-pressed="${on}">${icon('bookmark')}${on ? '已記住，明早顯示在首頁（點一下取消）' : '記住這家，明早顯示在首頁'}</button>`;
     }
 
     // 首頁最上面：晚上記住之後，顯示一條「明天早餐」；隔天早上變成完整的卡片，直接點餐
@@ -653,6 +668,13 @@
         doDraw();
     }
 
+    function extraActions(item, tomorrow) {
+        const id = esc(item.id);
+        const cal = tomorrow ? `<button type="button" class="act" data-act="calendar" data-id="${id}">${icon('calendar-plus')}加到行事曆</button>` : '';
+        const share = `<button type="button" class="act" data-act="share" data-id="${id}" data-mode="${tomorrow ? 'tomorrow' : 'today'}">${icon('share-2')}傳給對方</button>`;
+        return `<div class="actions">${cal}${share}</div>`;
+    }
+
     function pickHtml(item, pool) {
         const tomorrow = pool.mode === 'tomorrow';
         const from = state.filter === '全部' ? '' : `「${state.filter}」`;
@@ -672,6 +694,7 @@
                 ${noteHtml(item)}
                 ${pickActions(item)}
                 ${tomorrow ? pinButtonHtml(item.id) : ''}
+                ${extraActions(item, tomorrow)}
                 <p class="pick-hint">從${from} ${pool.list.length} 家裡抽${skipped ? `（略過 ${skipped}）` : ''}</p>
                 <button type="button" class="link-btn" data-act="draw-mode">${tomorrow ? '改抽現在還開著的店' : '改抽明天早餐'}</button>
             </div>`;
@@ -696,11 +719,16 @@
             </div>`;
     }
 
-    // 00 愛吃的品項，右邊有一鍵複製（貼到 LINE 點餐很方便）
+    // 愛吃的品項拆成一個一個（用頓號、逗號或換行分開），點哪個複製哪個，也可以全部複製，貼到 LINE 點餐很方便
+    const noteItems = (note) => String(note || '').split(/[\n、，,]+/).map((x) => x.trim()).filter(Boolean);
+
     function noteHtml(item) {
-        if (!item.note) return '';
-        return `<div class="note"><span class="note-text"><b>00 愛吃</b>${esc(item.note)}</span>`
-            + `<button type="button" class="copy" data-act="copy" data-id="${esc(item.id)}" aria-label="複製愛吃的品項">${icon('copy')}</button></div>`;
+        const items = noteItems(item.note);
+        if (!items.length) return '';
+        const id = esc(item.id);
+        const chips = items.map((t, i) => `<button type="button" class="item-chip" data-act="copy-one" data-id="${id}" data-i="${i}" aria-label="複製 ${esc(t)}"><span>${esc(t)}</span>${icon('copy')}</button>`).join('');
+        const all = items.length > 1 ? `<button type="button" class="item-chip all" data-act="copy-all" data-id="${id}"><span>全部複製</span>${icon('copy')}</button>` : '';
+        return `<div class="note"><b class="note-label">00 愛吃</b><div class="note-items">${chips}${all}</div></div>`;
     }
 
     // 卡片固定顯示四行，沒填的用淡色提示，每張卡片才會一樣整齊
@@ -750,9 +778,15 @@
         });
     }
 
+    const SKELETON = '<div class="skeleton" aria-hidden="true">' + '<div class="sk-card"><div class="sk-photo"></div><div class="sk-line w60"></div><div class="sk-line"></div><div class="sk-line w80"></div></div>'.repeat(2) + '</div>';
+
     function renderList() {
         const list = visible();
         const box = $('#list');
+        if (!state.loaded) {
+            if (!box.querySelector('.skeleton') && !box.querySelector('[data-act="retry"]')) box.innerHTML = SKELETON;
+            return;
+        }
         if (!state.items.length) {
             box.innerHTML = `<div class="state">還沒有店家${isAdmin() ? '<br>按右上角的「新增」加入第一家' : ''}</div>`;
             return;
@@ -845,7 +879,7 @@
                 ${photoHtml(item, { edit: true, w: 480 })}
                 <div class="body">
                     <h3 class="name">${esc(item.name)}</h3>
-                    ${item.note ? `<div class="like">愛吃 ${esc(item.note)}</div>` : ''}
+                    ${item.note ? `<div class="like">愛吃 ${esc(noteItems(item.note).join('、'))}</div>` : ''}
                 </div>
             </div>`;
 
@@ -861,11 +895,22 @@
             <div class="grid${key === 'closed' ? ' dim' : ''}">${groups[key].map(card).join('')}</div>`).join('');
     }
 
+    function agoText(t) {
+        const m = Math.floor((Date.now() - t) / 60000);
+        if (m < 1) return '剛剛';
+        if (m < 60) return `${m} 分鐘前`;
+        const h = Math.floor(m / 60);
+        return h < 24 ? `${h} 小時前` : `${Math.floor(h / 24)} 天前`;
+    }
+
     function renderFoot() {
-        $('#foot-info').textContent = state.loaded ? `共 ${state.items.length} 家早餐店` : '';
+        const count = state.loaded ? `共 ${state.items.length} 家早餐店` : '';
+        let updated = '';
+        if (state.loaded && state.updatedAt) {
+            updated = state.stale ? `・目前離線，顯示 ${agoText(state.updatedAt)}的資料` : `・資料更新於 ${agoText(state.updatedAt)}`;
+        }
+        $('#foot-info').textContent = count + updated;
         $('#admin-btn').innerHTML = isAdmin() ? '離開管理模式' : `${icon('lock')} 管理`;
-        $('#mine-btn').innerHTML = `${icon('notebook')} 我的早餐`;
-        $('#settings-btn').innerHTML = `${icon('settings')} 設定`;
     }
 
     /* ---------- 搖一搖抽籤 ---------- */
@@ -1174,27 +1219,107 @@
         toast(next === 'auto' ? `${MODE_TEXT.auto}（現在是${resolved === 'dark' ? '夜間' : '白天'}）` : MODE_TEXT[next]);
     }
 
-    async function copyNote(btn, id) {
-        const item = findItem(id);
-        if (!item || !item.note) return;
-        let ok = false;
+    async function copyToClipboard(text) {
         try {
-            await navigator.clipboard.writeText(item.note);
-            ok = true;
-        } catch (e) {
-            // 少數環境不能用剪貼簿 API，改用舊方法
-            const ta = document.createElement('textarea');
-            ta.value = item.note;
-            ta.style.cssText = 'position:fixed;opacity:0';
-            document.body.appendChild(ta);
-            ta.select();
-            try { ok = document.execCommand('copy'); } catch (err) { /* 忽略 */ }
-            ta.remove();
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (e) { /* 少數環境不能用剪貼簿 API，改用舊方法 */ }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (err) { /* 忽略 */ }
+        ta.remove();
+        return ok;
+    }
+
+    const toNode = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
+
+    // 複製愛吃的品項：index 是第幾個，null 代表全部
+    async function copyItem(btn, id, index) {
+        const item = findItem(id);
+        if (!item) return;
+        const text = index == null ? item.note : noteItems(item.note)[index];
+        if (!text) return;
+        const ok = await copyToClipboard(text);
+        // 在彈出視窗裡，提示訊息會被蓋住，所以直接讓圖示變成打勾
+        const svg = btn.querySelector('svg');
+        if (svg) {
+            svg.replaceWith(toNode(icon(ok ? 'check' : 'x')));
+            setTimeout(() => { const cur = btn.querySelector('svg'); if (cur) cur.replaceWith(toNode(icon('copy'))); }, 1500);
         }
-        // 在彈出視窗裡，提示訊息會被蓋住，所以直接讓按鈕變成打勾
-        btn.innerHTML = icon(ok ? 'check' : 'x');
-        setTimeout(() => { btn.innerHTML = icon('copy'); }, 1500);
         if (!document.querySelector('dialog[open]')) toast(ok ? '已複製，可以貼到 LINE 了' : '複製失敗，請手動選取');
+    }
+
+    // 彈出視窗裡提示訊息會被蓋住，所以讓按鈕自己顯示結果幾秒
+    function flashButton(btn, html, ms = 2200) {
+        const old = btn.innerHTML;
+        btn.innerHTML = html;
+        setTimeout(() => { btn.innerHTML = old; }, ms);
+    }
+
+    // 傳給對方：手機會跳出分享選單（LINE 等）；不支援就複製文字
+    async function shareItem(btn, id, mode) {
+        const item = findItem(id);
+        if (!item) return;
+        const tomorrow = mode === 'tomorrow';
+        const when = tomorrow ? tomorrowStatus(item) : statusOf(item);
+        const text = LIB.shareText({ tomorrow, item, whenText: when ? when.text : '', link: item.link });
+        if (navigator.share) {
+            try {
+                await navigator.share({ text });
+                return;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return; // 自己按了取消
+            }
+        }
+        const ok = await copyToClipboard(text);
+        flashButton(btn, `${icon(ok ? 'check' : 'x')}${ok ? '已複製，貼到 LINE 就好' : '複製失敗'}`);
+    }
+
+    // 加到行事曆：產生 .ics，明天 7:00 提醒。優先用分享選單（手機可以直接選「行事曆」），不行就下載檔案
+    async function addToCalendar(btn, id) {
+        const item = findItem(id);
+        if (!item) return;
+        const start = tomorrowDate();
+        start.setHours(REMINDER_HOUR, 0, 0, 0);
+        const st = tomorrowStatus(item);
+        const items = noteItems(item.note);
+        const description = [
+            st && st.text,
+            items.length ? `要吃：${items.join('、')}` : '',
+            item.phone ? `電話：${item.phone}` : '',
+            item.link ? `點餐：${item.link}` : '',
+        ].filter(Boolean).join('\n');
+        const ics = LIB.buildICS({
+            uid: `${item.id}-${LIB.ymd(start)}@breakfast`,
+            summary: `早餐：${item.name}`,
+            start,
+            minutes: 30,
+            description,
+            location: item.addr,
+            url: item.link,
+        });
+        const file = new File([ics], 'breakfast-reminder.ics', { type: 'text/calendar' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({ files: [file] });
+                return;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return;
+            }
+        }
+        const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'breakfast-reminder.ics';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        flashButton(btn, `${icon('check')}已產生行程檔`);
     }
 
     function renderAll() {
@@ -1228,6 +1353,7 @@
                     <p class="last-eaten" data-last="${esc(id)}">${ago ? `上次吃：${ago}` : ''}</p>
                     ${infoRows(item)}
                     ${actionsHtml(item)}
+                    <div class="actions"><button type="button" class="act" data-act="share" data-id="${esc(id)}" data-mode="${effectiveMode()}">${icon('share-2')}傳給對方</button></div>
                 </div>
             </div>`;
         dlg.showModal();
@@ -1514,7 +1640,9 @@
     function bind() {
         $('.view-toggle [data-view="swipe"]').innerHTML = icon('carousel-horizontal');
         $('.view-toggle [data-view="grid"]').innerHTML = icon('layout-grid');
-        $('#add-btn').innerHTML = `${icon('plus')}新增`;
+        $('#add-btn').innerHTML = icon('plus');
+        $('#settings-btn').innerHTML = icon('settings');
+        $('#mine-btn').innerHTML = icon('notebook');
         $('#draw-btn').innerHTML = `${icon('dice-5')}幫我抽一家`;
         enableSwipeClose($('#pick'));
         enableSwipeClose($('#detail'));
@@ -1577,7 +1705,10 @@
                     renderAll();
                     break;
                 case 'retry': load(); break;
-                case 'copy': copyNote(el, id); break;
+                case 'copy-one': copyItem(el, id, Number(el.dataset.i)); break;
+                case 'copy-all': copyItem(el, id, null); break;
+                case 'share': shareItem(el, id, el.dataset.mode); break;
+                case 'calendar': addToCalendar(el, id); break;
                 case 'theme': cycleTheme(); break;
                 case 'egg': pokeEgg(); break;
                 case 'mine': openMine(); break;
@@ -1666,7 +1797,13 @@
             refreshTheme();
             renderBar();
             renderPin();
+            renderFoot();
         }, 60 * 1000);
+
+        // 離線快取：沒網路也能打開（見 sw.js）
+        if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+            window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { /* 不支援或被擋住就算了 */ }));
+        }
     }
 
     bind();

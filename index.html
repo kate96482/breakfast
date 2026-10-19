@@ -14,15 +14,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="theme-color" content="#fff9f5">
 
-    <link rel="stylesheet" href="style.css?v=20261021c">
-    <script src="theme.js?v=20261021c"></script>
+    <link rel="stylesheet" href="style.css?v=20261022a">
+    <script src="theme.js?v=20261022a"></script>
 </head>
 <body>
     <div class="wrap">
         <header class="top">
             <h1>00 今天想吃什麼？</h1>
             <div class="top-right">
-                <button type="button" id="add-btn" class="btn primary sm add-btn" aria-label="新增店家"></button>
+                <button type="button" id="add-btn" class="theme-btn primary add-btn" aria-label="新增店家"></button>
+                <button type="button" id="settings-btn" class="theme-btn" data-act="settings" aria-label="設定"></button>
                 <button type="button" id="theme-btn" class="theme-btn" data-act="theme"></button>
             </div>
         </header>
@@ -53,14 +54,15 @@
         </div>
 
         <main id="list">
-            <div class="state">正在準備菜單…</div>
+            <div class="skeleton" aria-hidden="true">
+                <div class="sk-card"><div class="sk-photo"></div><div class="sk-line w60"></div><div class="sk-line"></div><div class="sk-line w80"></div></div>
+                <div class="sk-card"><div class="sk-photo"></div><div class="sk-line w60"></div><div class="sk-line"></div><div class="sk-line w80"></div></div>
+            </div>
         </main>
 
         <footer class="foot">
             <span id="foot-info"></span>
             <nav class="foot-links">
-                <button type="button" id="mine-btn" class="link-btn" data-act="mine"></button>
-                <button type="button" id="settings-btn" class="link-btn" data-act="settings"></button>
                 <button type="button" id="admin-btn" class="link-btn"></button>
             </nav>
         </footer>
@@ -72,6 +74,7 @@
             <button type="button" data-view="swipe" aria-label="滑動卡片"></button>
             <button type="button" data-view="grid" aria-label="看全部"></button>
         </div>
+        <button type="button" id="mine-btn" class="bar-btn" data-act="mine" aria-label="我的早餐"></button>
         <button type="button" id="draw-btn" class="btn primary draw-btn" data-act="draw" disabled></button>
     </nav>
 
@@ -159,7 +162,8 @@
 
     <div id="toast" class="toast" role="status"></div>
 
-    <script src="config.js?v=20261021c"></script>
-    <script src="app.js?v=20261021c"></script>
+    <script src="config.js?v=20261022a"></script>
+    <script src="lib.js?v=20261022a"></script>
+    <script src="app.js?v=20261022a"></script>
 </body>
 </html>
