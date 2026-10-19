@@ -106,7 +106,7 @@ body.admin .top .add-btn { display: flex; }
 .hero .star { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #f3efe0; opacity: 0; transition: opacity 0.4s; }
 .hero.night .star { opacity: 1; }
 .egg {
-    position: absolute; left: 6px; bottom: 4px; width: 52px; height: 48px; padding: 0;
+    position: absolute; left: 6px; bottom: 4px; width: 52px; height: 61px; padding: 0;
     border: 0; background: transparent; transform-origin: 50% 90%;
 }
 .egg svg { width: 100%; height: 100%; display: block; }
@@ -123,6 +123,8 @@ body.admin .top .add-btn { display: flex; }
     content: ""; position: absolute; left: -6px; bottom: 12px;
     border: 6px solid transparent; border-left: 0; border-right-color: var(--surface);
 }
+.hero.birthday .egg svg { animation: hop 1.4s ease-in-out infinite; }
+@keyframes hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg); } 50% { transform: rotate(10deg); } 75% { transform: rotate(-6deg); } }
 
 /* 抽籤結果（下方彈出） */
@@ -182,6 +184,25 @@ body.admin .top .add-btn { display: flex; }
 .gacha.drop .g-capsule { opacity: 1; transform: translateY(54px); }
 .gacha.open .g-top { transform: translateY(-10px) rotate(-25deg); }
 .gacha.open .g-bot { transform: translateY(6px) rotate(12deg); }
+
+/* 翻牌三選一 */
+.flip-row { display: flex; gap: 10px; justify-content: center; margin: 8px 0 4px; }
+.flip-card { flex: 1; max-width: 108px; height: 150px; padding: 0; border: 0; background: transparent; perspective: 700px; }
+.flip-inner { position: relative; display: block; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; }
+.flip-card.flipped .flip-inner { transform: rotateY(180deg); }
+.flip-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 8px; text-align: center; border-radius: 14px; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.flip-back { background: var(--primary-color); color: var(--on-primary); box-shadow: var(--shadow); background-image: radial-gradient(rgba(255, 255, 255, 0.22) 2px, transparent 2.5px); background-size: 14px 14px; }
+.flip-back .ico { width: 42px; height: 42px; }
+.flip-front { transform: rotateY(180deg); background: var(--surface); border: 2px solid var(--primary-color); color: var(--text-dark); font-size: 0.95rem; line-height: 1.4; word-break: break-all; }
+.flip-card.dim { opacity: 0.35; transition: opacity 0.4s; }
+.flip-card:not(.flipped):active .flip-inner { transform: scale(0.96); }
+
+/* 刮刮卡 */
+.scratch { position: relative; height: 190px; border-radius: 16px; overflow: hidden; background: var(--surface-2); box-shadow: var(--shadow); }
+.scratch-under { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; text-align: center; color: var(--text-dark); font-size: 1.25rem; }
+.scratch-under .ico { width: 44px; height: 44px; color: var(--primary-color); }
+.scratch-cover { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; transition: opacity 0.45s; }
+.scratch-cover.gone { opacity: 0; pointer-events: none; }
 
 /* 抽中時的彩帶 */
 .confetti { position: absolute; left: 0; right: 0; top: 0; height: 100%; overflow: hidden; pointer-events: none; z-index: 5; }
@@ -289,6 +310,7 @@ body.admin .edit-fab { display: flex; }
     min-height: 44px; padding: 10px 16px; font-weight: bold; font-size: 0.92rem;
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
 }
+a.btn { text-decoration: none; color: inherit; }
 .btn.primary { background: var(--primary-color); border-color: transparent; color: var(--on-primary); }
 .btn.primary:active { background: var(--primary-dark); }
 .btn.big { padding: 13px 18px; font-size: 1rem; border-radius: 14px; flex: none; }
@@ -483,6 +505,8 @@ textarea { resize: vertical; }
 .settings h3 small, .mine h3 small { font-size: 0.82rem; font-weight: normal; color: var(--text-3); }
 .settings .hint, .mine .hint { margin: 8px 0 0; font-size: 0.82rem; color: var(--text-3); line-height: 1.6; }
 .seg { display: flex; background: var(--surface-2); border-radius: 12px; padding: 4px; gap: 2px; }
+.seg.wrap { flex-wrap: wrap; }
+.seg.wrap button { flex: 1 1 30%; }
 .seg button { flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: var(--text-2); font-weight: bold; font-size: 0.9rem; }
 .seg button.on { background: var(--surface); color: var(--primary-color); box-shadow: var(--shadow); }
 .skins { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -530,6 +554,30 @@ textarea { resize: vertical; }
 .stamp.on .stamp-dot { border: 0; background: var(--primary-color); color: var(--on-primary); }
 .stamp-name { max-width: 100%; font-size: 0.78rem; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .complete { display: flex; align-items: center; gap: 10px; background: var(--primary-soft); color: var(--primary-text); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-weight: bold; font-size: 0.9rem; }
+
+/* 月報 */
+.rp-nav { display: inline-flex; align-items: center; color: var(--text-dark); font-weight: normal; }
+.rp-nav b { min-width: 4.8em; text-align: center; font-size: 0.92rem; }
+.rp-nav button { width: 44px; height: 44px; margin: -10px 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); display: flex; align-items: center; justify-content: center; }
+.rp-nav button:disabled { opacity: 0.3; }
+.rp-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+.rp-nums div { background: var(--primary-soft); color: var(--primary-text); border-radius: 12px; padding: 10px 2px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.rp-nums b { font-size: 1.45rem; line-height: 1.2; }
+.rp-nums span { font-size: 0.78rem; }
+.rp-top { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.rp-top li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 0.9rem; }
+.rp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dark); }
+.rp-n { color: var(--text-2); }
+.rp-bar { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.rp-bar i { display: block; height: 100%; border-radius: 4px; background: var(--primary-color); }
+.rp-stack { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; }
+.rp-stack i { min-width: 6px; }
+.rp-legend { list-style: none; margin: 10px 0 16px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.84rem; color: var(--text-2); }
+.rp-legend li { display: flex; align-items: center; gap: 6px; }
+.rp-legend i { width: 10px; height: 10px; border-radius: 50%; }
+.shot-img { display: block; width: 100%; border-radius: 12px; margin-bottom: 12px; }
+.pick-warn { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soon-soft); color: var(--text-dark); font-size: 0.86rem; line-height: 1.5; }
+.pick-warn .ico { flex: none; margin-top: 2px; color: var(--soon); }
 
 /* 提示訊息 */
 .toast {

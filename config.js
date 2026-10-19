@@ -4,5 +4,8 @@
 // CSV_URL：試算表「發佈到網路」的 CSV 網址
 window.BREAKFAST_CONFIG = {
     API_URL: 'https://script.google.com/macros/s/AKfycbwbv1CKFfZhHRSenzzRNAtGNvN2dWUxFqcxu4l34hKfv2WX8GjjzNSkLTj9WYjnbI4AXQ/exec',
+    // 特別的日子（月、日、名字、種類）。生日當天荷包蛋會戴派對帽，前 countdown 天會倒數。
+    // 國定假日不用寫在這裡，網頁會自己讀政府的行事曆
+    SPECIAL_DAYS: [{ month: 10, day: 22, name: '00', kind: 'birthday', countdown: 14 }],
     CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR9V8Aau0g3g-Jrgdsp2rX8yykfl1vQsY62JKBv7mxO91EVuXRcXvDoeFnzle5lMgc96Gl4oG_YJ-Ub/pub?gid=0&single=true&output=csv',
 };

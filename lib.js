@@ -62,6 +62,10 @@
         return calendar ? '' : (FIXED_HOLIDAYS[key.slice(4)] || '');
     }
 
+    // 政府資料裡的名稱有些很長，畫面上說「明天是…」的時候用簡短的叫法
+    const HOLIDAY_SHORT = [[/光復/, '光復節'], [/孔子|教師/, '教師節'], [/開國紀念日/, '元旦'], [/農曆除夕/, '除夕']];
+    const holidayLabel = (name) => { const hit = HOLIDAY_SHORT.find(([re]) => re.test(name)); return hit ? hit[1] : name; };
+
     function holidayStyle(name) {
         const hit = HOLIDAY_STYLE.find(([re]) => re.test(name));
         return hit ? { accessory: hit[1], greeting: hit[2] } : { accessory: null, greeting: `今天放假：${name}，有些店可能休息` };
@@ -310,7 +314,7 @@
 
     const lib = {
         ymd, midnight, CAL_URL, FIXED_HOLIDAYS, ACCESSORIES,
-        buildCalendar, holidayOn, holidayStyle, daysUntil, specialOn, countdownLine,
+        buildCalendar, holidayOn, holidayLabel, holidayStyle, daysUntil, specialOn, countdownLine,
         buildICS, icsFold, icsEscape,
         haversine, walkMinutes, formatWalk,
         parseAddress, geocodeQueries, geocode,

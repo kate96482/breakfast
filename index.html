@@ -14,8 +14,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="theme-color" content="#fff9f5">
 
-    <link rel="stylesheet" href="style.css?v=20261022a">
-    <script src="theme.js?v=20261022a"></script>
+    <link rel="stylesheet" href="style.css?v=20261022b">
+    <script src="theme.js?v=20261022b"></script>
 </head>
 <body>
     <div class="wrap">
@@ -34,12 +34,13 @@
             <i class="star" style="left:70%;top:12px"></i><i class="star" style="left:86%;top:36px"></i>
             <div id="orb" class="orb"><i class="orb-cut"></i></div>
             <button type="button" id="egg" class="egg" data-act="egg" aria-label="戳一下荷包蛋">
-                <svg viewBox="0 0 48 44" aria-hidden="true">
+                <svg viewBox="0 -12 48 56" aria-hidden="true">
                     <ellipse cx="24" cy="25" rx="21" ry="16" fill="#fff" stroke="#d9cfc0" stroke-width="1.5"/>
                     <circle cx="24" cy="24" r="11" fill="#ffb62e"/>
                     <g class="eyes-open"><circle cx="20" cy="23" r="1.6" fill="#6b4200"/><circle cx="28" cy="23" r="1.6" fill="#6b4200"/></g>
                     <g class="eyes-closed" fill="none" stroke="#6b4200" stroke-width="1.5" stroke-linecap="round"><path d="M17.5 23.5q2.5 2 5 0"/><path d="M25.5 23.5q2.5 2 5 0"/></g>
                     <ellipse cx="17" cy="27.5" rx="2.2" ry="1.2" fill="#ff8f7a" opacity=".75"/><ellipse cx="31" cy="27.5" rx="2.2" ry="1.2" fill="#ff8f7a" opacity=".75"/>
+                    <g class="acc"></g>
                 </svg>
             </button>
             <p id="bubble" class="bubble"></p>
@@ -89,6 +90,9 @@
 
     <!-- 設定：日夜模式、主題皮膚、抽籤方式、搖一搖 -->
     <dialog id="settings" class="sheet"></dialog>
+
+    <!-- 月報圖片（不能直接分享的時候，改成在這裡長按存圖） -->
+    <dialog id="shot" class="sheet"></dialog>
 
     <!-- 管理員登入 -->
     <dialog id="login" class="sheet small">
@@ -162,8 +166,8 @@
 
     <div id="toast" class="toast" role="status"></div>
 
-    <script src="config.js?v=20261022a"></script>
-    <script src="lib.js?v=20261022a"></script>
-    <script src="app.js?v=20261022a"></script>
+    <script src="config.js?v=20261022b"></script>
+    <script src="lib.js?v=20261022b"></script>
+    <script src="app.js?v=20261022b"></script>
 </body>
 </html>

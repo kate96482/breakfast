@@ -63,6 +63,8 @@
         'bookmark': '<path d="M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4z"/>',
         'share-2': '<path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1"/><path d="M12 14v-11"/><path d="M9 6l3 -3l3 3"/>',
         'calendar-plus': '<path d="M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/><path d="M16 19h6"/><path d="M19 16v6"/>',
+        'download': '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/>',
+        'info-circle': '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/>',
         'tools-kitchen-2': '<path d="M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3"/>',
     };
     const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -84,6 +86,10 @@
         log: readLog(),       // 週曆用：[[店家 id, 時間], …]
         passport: readPassport(), // 護照用：{ 店家 id: 第一次吃的時間 }
         quip: false,          // 荷包蛋正在說悄悄話
+        lineIdx: 0,           // 戳荷包蛋時，輪到第幾句
+        cal: null,            // 政府行事曆（國定假日），沒抓到就是 null
+        calYears: new Set(),  // 行事曆有哪幾年
+        reportOffset: 0,      // 月報看哪個月：0 這個月、-1 上個月…
         override: null,       // 手動切換「抽現在／抽明天」，只在這個時段有效
         updatedAt: 0,         // 目前畫面上的資料是什麼時候抓的
         stale: false,         // 最近一次更新失敗（例如沒網路），畫面上是舊資料
@@ -490,10 +496,151 @@
         await sleep(950);
     }
 
-    // 抽籤方式：吐司機、扭蛋機、每次隨機
-    const getMethod = () => { const v = storage.get(METHOD_KEY); return v === 'gacha' || v === 'random' ? v : 'toaster'; };
-    const pickMethod = () => { const m = getMethod(); return m === 'random' ? (Math.random() < 0.5 ? 'toaster' : 'gacha') : m; };
-    const drawAnimation = (dlg, method) => (method === 'gacha' ? gachaAnimation(dlg) : toasterAnimation(dlg));
+    // 抽籤方式：吐司機、扭蛋機、翻牌、刮刮卡、每次隨機
+    const METHODS = ['toaster', 'gacha', 'flip', 'scratch'];
+    const getMethod = () => { const v = storage.get(METHOD_KEY); return v === 'random' || METHODS.includes(v) ? v : 'toaster'; };
+    const pickMethod = () => { const m = getMethod(); return m === 'random' ? METHODS[Math.floor(Math.random() * METHODS.length)] : m; };
+    const shuffled = (arr) => arr.map((x) => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map((p) => p[1]);
+
+    // 動畫播完（或自己操作完）回傳抽到的店；中途把面板關掉就回傳 null
+    async function drawAnimation(dlg, method, { list, final }) {
+        if (method === 'flip') return flipAnimation(dlg, list, final);
+        if (method === 'scratch') return scratchAnimation(dlg, final);
+        await (method === 'gacha' ? gachaAnimation(dlg) : toasterAnimation(dlg));
+        return final;
+    }
+
+    // 等使用者操作；面板被關掉就算了，不會一直卡著
+    function waitForUser(dlg, setup) {
+        return new Promise((resolve) => {
+            let done = false;
+            const finish = (value) => {
+                if (done) return;
+                done = true;
+                dlg.removeEventListener('close', onClose);
+                resolve(value);
+            };
+            const onClose = () => finish(null);
+            dlg.addEventListener('close', onClose);
+            setup(finish);
+        });
+    }
+
+    // 翻牌：發 3 張牌（3 家不同的店），點哪一張就是哪一家
+    function flipAnimation(dlg, list, final) {
+        const others = shuffled(list.filter((x) => x.id !== final.id)).slice(0, 2);
+        const cards = shuffled([final, ...others]);
+        dlg.innerHTML = `
+            <div class="sheet-grip"></div>
+            <div class="pick rolling">
+                <p class="pick-label">點一張牌，看看是哪一家</p>
+                <div class="flip-row">${cards.map((it, i) => `
+                    <button type="button" class="flip-card" data-i="${i}" aria-label="第 ${i + 1} 張牌，還沒翻開">
+                        <span class="flip-inner">
+                            <span class="flip-face flip-back">${icon('egg')}</span>
+                            <span class="flip-face flip-front"><b>${esc(it.name)}</b></span>
+                        </span>
+                    </button>`).join('')}</div>
+                <h2 class="pick-name" tabindex="-1" autofocus>&nbsp;</h2>
+            </div>`;
+        return waitForUser(dlg, (finish) => {
+            let chosen = false;
+            dlg.querySelector('.flip-row').addEventListener('click', async (e) => {
+                const btn = e.target.closest('.flip-card');
+                if (!btn || chosen) return;
+                chosen = true;
+                dlg.querySelectorAll('.flip-card').forEach((c) => { if (c !== btn) c.classList.add('dim'); });
+                btn.classList.add('flipped');
+                btn.setAttribute('aria-label', `翻開了：${cards[Number(btn.dataset.i)].name}`);
+                await sleep(900);
+                finish(cards[Number(btn.dataset.i)]);
+            });
+        });
+    }
+
+    // 刮刮卡：用手指刮掉銀色的那層，刮開約一半就揭曉
+    function scratchAnimation(dlg, final) {
+        dlg.innerHTML = `
+            <div class="sheet-grip"></div>
+            <div class="pick rolling">
+                <p class="pick-label">用手指刮開，看看吃什麼</p>
+                <div class="scratch">
+                    <div class="scratch-under">${icon(typeIcon(final))}<b>${esc(final.name)}</b></div>
+                    <canvas class="scratch-cover" aria-hidden="true"></canvas>
+                </div>
+                <button type="button" class="link-btn" data-scratch-skip>直接揭曉</button>
+                <h2 class="pick-name" tabindex="-1" autofocus>&nbsp;</h2>
+            </div>`;
+        return waitForUser(dlg, (finish) => {
+            const box = dlg.querySelector('.scratch');
+            const cv = dlg.querySelector('.scratch-cover');
+            const dpr = Math.min(window.devicePixelRatio || 1, 3);
+            const w = box.clientWidth;
+            const h = box.clientHeight;
+            cv.width = Math.round(w * dpr);
+            cv.height = Math.round(h * dpr);
+            const g = cv.getContext('2d');
+            g.scale(dpr, dpr);
+            const grad = g.createLinearGradient(0, 0, w, h);
+            grad.addColorStop(0, '#b9bfc6');
+            grad.addColorStop(0.5, '#e4e7ea');
+            grad.addColorStop(1, '#aeb4bb');
+            g.fillStyle = grad;
+            g.fillRect(0, 0, w, h);
+            g.strokeStyle = 'rgba(255,255,255,0.35)';
+            g.lineWidth = 6;
+            for (let x = -h; x < w; x += 22) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + h, 0); g.stroke(); }
+            g.fillStyle = '#4a4f55';
+            g.font = 'bold 22px system-ui, -apple-system, "PingFang TC", sans-serif';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText('刮開看看', w / 2, h / 2);
+
+            const R = 24; // 刮開的筆刷半徑
+            const CELL = 12;
+            const cols = Math.ceil(w / CELL);
+            const rows = Math.ceil(h / CELL);
+            const seen = new Uint8Array(cols * rows);
+            let marked = 0;
+            let last = null;
+            let finished = false;
+            const reveal = () => {
+                if (finished) return;
+                finished = true;
+                cv.classList.add('gone');
+                setTimeout(() => finish(final), reduceMotion() ? 0 : 450);
+            };
+            const scratchAt = (x, y) => {
+                g.globalCompositeOperation = 'destination-out';
+                g.strokeStyle = '#000'; // 要完全不透明才刮得乾淨
+                g.lineCap = 'round';
+                g.lineWidth = R * 2;
+                g.beginPath();
+                g.moveTo(last ? last[0] : x, last ? last[1] : y);
+                g.lineTo(x, y);
+                g.stroke();
+                last = [x, y];
+                for (let cy = Math.max(0, Math.floor((y - R) / CELL)); cy <= Math.min(rows - 1, Math.floor((y + R) / CELL)); cy++) {
+                    for (let cx = Math.max(0, Math.floor((x - R) / CELL)); cx <= Math.min(cols - 1, Math.floor((x + R) / CELL)); cx++) {
+                        const dx = cx * CELL + CELL / 2 - x;
+                        const dy = cy * CELL + CELL / 2 - y;
+                        if (dx * dx + dy * dy <= R * R && !seen[cy * cols + cx]) { seen[cy * cols + cx] = 1; marked++; }
+                    }
+                }
+                if (marked / (cols * rows) > 0.45) reveal();
+            };
+            const pos = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+            let down = false;
+            cv.addEventListener('pointerdown', (e) => { down = true; last = null; cv.setPointerCapture(e.pointerId); scratchAt(...pos(e)); });
+            cv.addEventListener('pointermove', (e) => { if (down) scratchAt(...pos(e)); });
+            const up = () => { down = false; last = null; };
+            cv.addEventListener('pointerup', up);
+            cv.addEventListener('pointercancel', up);
+            // 在刮的時候，不要讓面板跟著被往下拉或整頁捲動
+            ['touchstart', 'touchmove'].forEach((t) => cv.addEventListener(t, (e) => { e.stopPropagation(); }, { passive: true }));
+            dlg.querySelector('[data-scratch-skip]').addEventListener('click', reveal);
+        });
+    }
 
     async function gachaAnimation(dlg) {
         dlg.innerHTML = `
@@ -546,15 +693,16 @@
             return;
         }
         const choices = list.length > 1 ? list.filter((x) => x.id !== state.pick) : list;
-        const final = choices[Math.floor(Math.random() * choices.length)];
+        let final = choices[Math.floor(Math.random() * choices.length)];
         const dlg = $('#pick');
         if (!dlg.open) dlg.showModal();
 
         if (list.length > 1 && !reduceMotion()) {
             state.rolling = true;
-            await drawAnimation(dlg, pickMethod());
+            const chosen = await drawAnimation(dlg, pickMethod(), { list: choices.length > 1 ? choices : list, final });
             state.rolling = false;
-            if (!dlg.open) return; // 烤的時候被關掉了
+            if (!chosen || !dlg.open) return; // 過程中被關掉了
+            final = chosen; // 翻牌是使用者自己點的那一張
         }
         state.pick = final.id;
         dlg.innerHTML = pickHtml(final, pool);
@@ -675,6 +823,12 @@
         return `<div class="actions">${cal}${share}</div>`;
     }
 
+    // 抽的那天剛好放假，提醒有些店可能休息
+    function holidayWarn(tomorrow) {
+        const name = holidayName(tomorrow ? tomorrowDate() : new Date());
+        return name ? `<p class="pick-warn">${icon('info-circle')}${tomorrow ? '明天' : '今天'}是${esc(name)}，有些店可能休息，先打電話確認比較保險</p>` : '';
+    }
+
     function pickHtml(item, pool) {
         const tomorrow = pool.mode === 'tomorrow';
         const from = state.filter === '全部' ? '' : `「${state.filter}」`;
@@ -692,6 +846,7 @@
                 <p class="last-eaten" data-last="${esc(item.id)}">${ago ? `上次吃：${ago}` : ''}</p>
                 ${photoHtml(item, { w: 900, forceStatus: tomorrow ? tomorrowStatus(item) : undefined })}
                 ${noteHtml(item)}
+                ${holidayWarn(tomorrow)}
                 ${pickActions(item)}
                 ${tomorrow ? pinButtonHtml(item.id) : ''}
                 ${extraActions(item, tomorrow)}
@@ -1004,6 +1159,186 @@
     const STAR = '<path d="M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z"/>';
     const starsHtml = (n) => Array.from({ length: 5 }, (_, i) => `<svg class="star${i < n ? ' on' : ''}" viewBox="0 0 24 24" aria-hidden="true">${STAR}</svg>`).join('');
 
+    /* ---------- 月報 ---------- */
+
+    const TYPE_COLORS = ['#c93232', '#ef9f27', '#378add', '#1d9e75', '#7f77dd', '#ff8fa3'];
+
+    function reportMonth() {
+        const d = new Date();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + state.reportOffset);
+        return { year: d.getFullYear(), month: d.getMonth() + 1 };
+    }
+    const monthLabel = (ym) => (ym.year === new Date().getFullYear() ? `${ym.month} 月` : `${ym.year} 年 ${ym.month} 月`);
+    const reportStats = (ym) => LIB.monthStats(state.log, state.items, state.passport, ym.year, ym.month);
+
+    function reportHtml() {
+        const ym = reportMonth();
+        const st = reportStats(ym);
+        const first = state.log.reduce((m, e) => Math.min(m, e[1]), Infinity);
+        const canPrev = first < new Date(ym.year, ym.month - 1, 1).getTime();
+        const canNext = state.reportOffset < 0;
+        let body = `<p class="hint">${monthLabel(ym)}還沒有紀錄。按過「電話」或「點餐」，就會記在這裡。</p>`;
+        if (st.total) {
+            const max = st.top[0].count;
+            body = `
+                <div class="rp-nums">
+                    <div><b>${st.total}</b><span>次早餐</span></div>
+                    <div><b>${st.days}</b><span>天有吃</span></div>
+                    <div><b>${st.shops}</b><span>家店</span></div>
+                    <div><b>${st.newCount}</b><span>家新嘗試</span></div>
+                </div>
+                <ol class="rp-top">${st.top.map((t) => `<li><span class="rp-name">${esc(t.name)}</span><span class="rp-n">${t.count} 次</span>
+                    <span class="rp-bar"><i style="width:${Math.round((t.count / max) * 100)}%"></i></span></li>`).join('')}</ol>
+                <div class="rp-stack" role="img" aria-label="${esc(st.types.map((t) => `${t.type} ${t.count} 次`).join('、'))}">${st.types.map((t, i) => `<i style="flex:${t.count};background:${TYPE_COLORS[i % TYPE_COLORS.length]}"></i>`).join('')}</div>
+                <ul class="rp-legend">${st.types.map((t, i) => `<li><i style="background:${TYPE_COLORS[i % TYPE_COLORS.length]}"></i>${esc(t.type)} ${t.count}</li>`).join('')}</ul>
+                <button type="button" class="btn full" data-act="report-save">${icon('download')}存成圖片</button>`;
+        }
+        return `<section data-report>
+            <h3>早餐月報<span class="rp-nav">
+                <button type="button" data-act="report-prev" aria-label="上個月"${canPrev ? '' : ' disabled'}>${icon('chevron-left')}</button>
+                <b>${monthLabel(ym)}</b>
+                <button type="button" data-act="report-next" aria-label="下個月"${canNext ? '' : ' disabled'}>${icon('chevron-right')}</button>
+            </span></h3>
+            ${body}
+        </section>`;
+    }
+
+    function shiftReport(delta) {
+        state.reportOffset = Math.min(0, state.reportOffset + delta);
+        const sec = $('#mine [data-report]');
+        if (sec) sec.outerHTML = reportHtml();
+    }
+
+    // 把月報畫成一張圖（1080×1620），顏色跟著目前的主題皮膚
+    function drawReport(ym, st) {
+        const W = 1080;
+        const H = 1620;
+        const cv = document.createElement('canvas');
+        cv.width = W;
+        cv.height = H;
+        const g = cv.getContext('2d');
+        const css = getComputedStyle(document.documentElement);
+        const v = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
+        const C = { bg: v('--bg-color', '#fff9f5'), card: v('--primary-soft', '#fdeaea'), ink: v('--text-dark', '#222'), ink2: v('--text-2', '#555'), main: v('--primary-color', '#c93232'), onMain: v('--on-primary', '#fff'), track: v('--surface-2', '#eee') };
+        const FONT = '"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif';
+        const text = (str, x, y, size, color, weight = 'normal', align = 'left') => {
+            g.font = `${weight} ${size}px ${FONT}`;
+            g.fillStyle = color;
+            g.textAlign = align;
+            g.textBaseline = 'alphabetic';
+            g.fillText(str, x, y);
+        };
+        const fit = (str, maxW, size, weight) => {
+            g.font = `${weight} ${size}px ${FONT}`;
+            let t = str;
+            while (t.length > 1 && g.measureText(t).width > maxW) t = t.slice(0, -1);
+            return t === str ? str : `${t}…`;
+        };
+        const rr = (x, y, w, h, r, color) => {
+            g.fillStyle = color;
+            g.beginPath();
+            g.moveTo(x + r, y);
+            g.arcTo(x + w, y, x + w, y + h, r);
+            g.arcTo(x + w, y + h, x, y + h, r);
+            g.arcTo(x, y + h, x, y, r);
+            g.arcTo(x, y, x + w, y, r);
+            g.closePath();
+            g.fill();
+        };
+
+        g.fillStyle = C.bg;
+        g.fillRect(0, 0, W, H);
+        g.fillStyle = C.main;
+        g.fillRect(0, 0, W, 270);
+        // 荷包蛋
+        g.fillStyle = '#fff';
+        g.beginPath(); g.ellipse(930, 140, 92, 70, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#ffb62e';
+        g.beginPath(); g.arc(930, 136, 42, 0, Math.PI * 2); g.fill();
+        text(`00 的 ${ym.month} 月早餐月報`, 60, 150, 68, C.onMain, 'bold');
+        text(`${ym.year} 年`, 62, 215, 36, C.onMain);
+
+        const tiles = [[st.total, '次早餐'], [st.days, '天有吃'], [st.shops, '家店'], [st.newCount, '家新嘗試']];
+        tiles.forEach(([n, label], i) => {
+            const x = 60 + (i % 2) * 510;
+            const y = 320 + Math.floor(i / 2) * 190;
+            rr(x, y, 450, 160, 28, C.card);
+            text(String(n), x + 40, y + 98, 84, C.main, 'bold');
+            text(label, x + 40, y + 140, 34, C.ink2);
+        });
+
+        text('最常吃的店', 60, 770, 44, C.ink, 'bold');
+        const max = st.top.length ? st.top[0].count : 1;
+        st.top.forEach((t, i) => {
+            const y = 810 + i * 100;
+            text(fit(t.name, 760, 36, 'normal'), 60, y + 36, 36, C.ink);
+            text(`${t.count} 次`, 1020, y + 36, 36, C.ink2, 'normal', 'right');
+            rr(60, y + 52, 960, 20, 10, C.track);
+            rr(60, y + 52, Math.max(20, 960 * (t.count / max)), 20, 10, C.main);
+        });
+
+        text('吃了哪些類型', 60, 1366, 44, C.ink, 'bold');
+        const total = st.types.reduce((a, t) => a + t.count, 0) || 1;
+        let x = 60;
+        st.types.forEach((t, i) => {
+            const w = Math.max(14, Math.round((960 * t.count) / total));
+            rr(x, 1392, w, 34, 8, TYPE_COLORS[i % TYPE_COLORS.length]);
+            x += w;
+        });
+        let lx = 60;
+        let ly = 1480;
+        st.types.forEach((t, i) => {
+            const label = `${t.type} ${t.count}`;
+            g.font = `normal 32px ${FONT}`;
+            const w = g.measureText(label).width + 56;
+            if (lx + w > 1020) { lx = 60; ly += 44; }
+            g.fillStyle = TYPE_COLORS[i % TYPE_COLORS.length];
+            g.beginPath(); g.arc(lx + 12, ly - 11, 12, 0, Math.PI * 2); g.fill();
+            text(label, lx + 36, ly, 32, C.ink2);
+            lx += w + 16;
+        });
+        text('00 專屬早餐清單', W / 2, H - 28, 28, C.ink2, 'normal', 'center');
+        return new Promise((resolve) => cv.toBlob(resolve, 'image/png'));
+    }
+
+    function showShot(blob, name) {
+        const url = URL.createObjectURL(blob);
+        const dlg = $('#shot');
+        dlg.innerHTML = `
+            <div class="sheet-head">
+                <h2 tabindex="-1" autofocus>早餐月報</h2>
+                <button type="button" class="icon-btn" data-close aria-label="關閉">${icon('x')}</button>
+            </div>
+            <div class="pad">
+                <img class="shot-img" src="${url}" alt="早餐月報圖片">
+                <p class="hint">長按圖片，選「加入照片」或「儲存圖片」。</p>
+                <a class="btn primary full" href="${url}" download="${esc(name)}">${icon('download')}下載圖片</a>
+            </div>`;
+        dlg.addEventListener('close', () => URL.revokeObjectURL(url), { once: true });
+        dlg.showModal();
+        dlg.scrollTop = 0;
+    }
+
+    async function saveReport(btn) {
+        const ym = reportMonth();
+        const st = reportStats(ym);
+        if (!st.total) return;
+        const blob = await drawReport(ym, st);
+        if (!blob) { toast('做不出圖片，可以改用螢幕截圖'); return; }
+        const name = `早餐月報-${ym.year}-${String(ym.month).padStart(2, '0')}.png`;
+        const file = new File([blob], name, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({ files: [file], title: `${ym.month} 月早餐月報` });
+                return;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return; // 自己按了取消
+            }
+        }
+        showShot(blob, name);
+    }
+
     function mineHtml() {
         const now = new Date();
         const f = fortune(now);
@@ -1053,6 +1388,7 @@
                     <div class="wk">${strip}</div>
                     ${rows ? `<ul class="wk-list">${rows}</ul>` : '<p class="hint">按了「電話」或「點餐」，就會記在這裡。</p>'}
                 </section>
+                ${reportHtml()}
                 <section>
                     <h3>早餐護照<small>已吃過 ${stamped} / ${total} 家</small></h3>
                     ${total >= 3 && stamped === total ? `<div class="complete">${icon('trophy')}集滿了！${total} 家早餐店都吃過一輪</div>` : ''}
@@ -1078,12 +1414,20 @@
         blueberry: { name: '藍莓', l: ['#f8f7ff', '#5a4fc7'], d: ['#16151d', '#a69bff'] },
     };
 
+    const METHOD_HINT = {
+        toaster: '按下去，吐司機會彈出今天的早餐。',
+        gacha: '轉一下扭蛋機，掉出一顆膠囊。',
+        flip: '發三張牌，你自己點一張，點到哪家就是哪家。',
+        scratch: '用手指刮開銀色那層，看看是哪一家。',
+        random: '每次抽都隨機換一種玩法。',
+    };
+
     function settingsHtml() {
         const mode = THEME.get();
         const skin = THEME.getSkin();
         const method = getMethod();
         const shakeOn = isShakeOn();
-        const seg = (act, current, options) => `<div class="seg" role="group">${options.map(([v, label]) =>
+        const seg = (act, current, options, extra = '') => `<div class="seg ${extra}" role="group">${options.map(([v, label]) =>
             `<button type="button" class="${v === current ? 'on' : ''}" data-act="${act}" data-v="${v}" aria-pressed="${v === current}">${label}</button>`).join('')}</div>`;
         const shakeNote = shakeOn
             ? '已開啟：在主畫面搖一搖手機就會抽。iPhone 重新打開網頁後，第一次點畫面時可能會再問你一次是否允許動作感應。'
@@ -1112,7 +1456,8 @@
                 </section>
                 <section>
                     <h3>抽籤方式</h3>
-                    ${seg('set-method', method, [['toaster', '吐司機'], ['gacha', '扭蛋機'], ['random', '每次隨機']])}
+                    ${seg('set-method', method, [['toaster', '吐司機'], ['gacha', '扭蛋機'], ['flip', '翻牌三選一'], ['scratch', '刮刮卡'], ['random', '每次隨機']], 'wrap')}
+                    <p class="hint">${METHOD_HINT[method]}</p>
                 </section>
                 <section>
                     <h3>搖一搖</h3>
@@ -1135,16 +1480,82 @@
 
     /* ---------- 荷包蛋夥伴與日夜模式 ---------- */
 
-    function greeting(now = new Date()) {
+    /* ---------- 節日與生日 ---------- */
+
+    const SPECIAL_DAYS = Array.isArray(CONFIG.SPECIAL_DAYS) ? CONFIG.SPECIAL_DAYS : [];
+    const CAL_KEY = 'breakfast-cal';
+    const CAL_TTL = 30 * DAY_MS;
+
+    // 國定假日：有抓到那一年的政府行事曆就用它，沒有就只認固定日期的那幾個
+    const calendarFor = (date) => (state.calYears.has(date.getFullYear()) ? state.cal : null);
+    const holidayName = (date) => LIB.holidayLabel(LIB.holidayOn(date, calendarFor(date)));
+    const specialToday = (now = new Date()) => LIB.specialOn(now, calendarFor(now), SPECIAL_DAYS);
+
+    // 行事曆每年存一次在手機裡（30 天內不重抓）；抓不到就先用存起來的，再不行就只用固定日期
+    async function loadCalendar() {
+        let store = {};
+        try { store = JSON.parse(storage.get(CAL_KEY) || '{}') || {}; } catch (e) { store = {}; }
+        const years = [...new Set([new Date().getFullYear(), tomorrowDate().getFullYear()])];
+        const apply = () => {
+            const have = years.filter((y) => store[y] && Array.isArray(store[y].data));
+            state.calYears = new Set(have);
+            state.cal = LIB.buildCalendar(have.flatMap((y) => store[y].data));
+        };
+        apply();
+        renderHero();
+        let changed = false;
+        await Promise.all(years.map(async (y) => {
+            if (store[y] && Date.now() - store[y].t < CAL_TTL) return;
+            try {
+                const res = await fetch(LIB.CAL_URL(y));
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!Array.isArray(data) || !data.length) return;
+                store[y] = { t: Date.now(), data: data.filter((x) => x && x.isHoliday && x.description).map((x) => ({ date: x.date, isHoliday: true, description: x.description })) };
+                changed = true;
+            } catch (e) { /* 讀不到就算了 */ }
+        }));
+        if (changed) {
+            storage.set(CAL_KEY, JSON.stringify(store));
+            apply();
+            renderHero();
+        }
+    }
+
+    // 荷包蛋會說的話，由重要到不重要；平常只有最後一句（依時間打招呼）。第一句就是平常顯示的那句
+    function heroLines(now = new Date()) {
+        const lines = [];
+        const special = specialToday(now);
+        if (special && special.kind !== 'holiday') lines.push(special.greeting);
+        const pin = pinLine(now);
+        if (pin) lines.push(pin);
+        if (special && special.kind === 'holiday') lines.push(special.greeting);
+        // 生日倒數：最後 7 天排在問候前面（一開網頁就看到），再早一點的只在戳荷包蛋時才說
+        const near = LIB.countdownLine(now, SPECIAL_DAYS.map((d) => Object.assign({}, d, { countdown: Math.min(d.countdown == null ? 14 : d.countdown, 7) })));
+        if (near) lines.push(near);
+        const tom = !(special && special.kind === 'holiday') && holidayName(tomorrowDate());
+        if (tom) lines.push(`明天是${tom}，有些店可能休息`);
+        lines.push(greeting(now));
+        const far = LIB.countdownLine(now, SPECIAL_DAYS);
+        if (far && far !== near) lines.push(far);
+        return lines;
+    }
+
+    function pinLine(now = new Date()) {
         const h = now.getHours();
-        const weekend = now.getDay() === 0 || now.getDay() === 6;
-        const hasHours = state.loaded && state.items.some((it) => it.hours);
-        const open = state.items.filter((it) => (statusOf(it, now) || {}).cls === 'open').length;
         const today = todaysPin();
         if (today && h >= 5 && h < 14) return `早安！昨晚決定了今天吃「${today.item.name}」`;
         const pin = readPin();
         const tomorrowItem = pin && pin.day === dayKey(tomorrowDate()) && findItem(pin.id);
         if (tomorrowItem && h >= 14) return `已記住明天吃「${tomorrowItem.name}」，晚安！`;
+        return '';
+    }
+
+    function greeting(now = new Date()) {
+        const h = now.getHours();
+        const weekend = now.getDay() === 0 || now.getDay() === 6;
+        const hasHours = state.loaded && state.items.some((it) => it.hours);
+        const open = state.items.filter((it) => (statusOf(it, now) || {}).cls === 'open').length;
         if (h < 5) return '還這麼早？再睡一下，早餐店還沒開喔';
         if (h < 10) return weekend ? (h < 8 ? '週末還這麼早起？今天想吃什麼？' : '週末慢慢來，今天想吃什麼？') : '早安！今天想吃什麼？';
         if (h < 14) {
@@ -1170,7 +1581,11 @@
         const orb = $('#orb');
         orb.style.left = `${Math.round(8 + p * 70)}%`;
         orb.style.top = `${Math.round(6 + 34 * Math.pow(2 * p - 1, 2))}px`;
-        if (!state.quip) $('#bubble').textContent = greeting(now);
+        const special = specialToday(now);
+        const acc = $('#egg .acc');
+        if (acc) acc.innerHTML = special && LIB.ACCESSORIES[special.accessory] ? LIB.ACCESSORIES[special.accessory] : '';
+        hero.classList.toggle('birthday', !!special && special.kind === 'birthday');
+        if (!state.quip) $('#bubble').textContent = heroLines(now)[0];
     }
 
     const QUIPS = ['別戳啦，我會破掉的', '肚子餓了嗎？按下面的按鈕吧', '我是半熟的喔', '要加蛋嗎？', '今天的運氣不錯喔'];
@@ -1189,7 +1604,9 @@
             $('#bubble').textContent = `今日運勢 ${'★'.repeat(f.stars)}${'☆'.repeat(5 - f.stars)}　幸運店家：${f.shop.name}`;
             ms = 4800;
         } else {
-            $('#bubble').textContent = QUIPS[Math.floor(Math.random() * QUIPS.length)];
+            // 輪流說：今天的特別消息（生日、節日、記住的店…），最後才是隨機的悄悄話
+            const seq = heroLines().slice(1).concat([QUIPS[Math.floor(Math.random() * QUIPS.length)]]);
+            $('#bubble').textContent = seq[state.lineIdx++ % seq.length];
         }
         clearTimeout(quipTimer);
         quipTimer = setTimeout(() => { state.quip = false; renderHero(); }, ms);
@@ -1648,6 +2065,7 @@
         enableSwipeClose($('#detail'));
         enableSwipeClose($('#mine'));
         enableSwipeClose($('#settings'));
+        enableSwipeClose($('#shot'));
 
         // 彈出視窗開著的時候，把背後的頁面固定住（記住捲到哪裡，關掉再還原），
         // 不然在視窗或灰色背景上滑動，背景也會跟著動
@@ -1711,7 +2129,10 @@
                 case 'calendar': addToCalendar(el, id); break;
                 case 'theme': cycleTheme(); break;
                 case 'egg': pokeEgg(); break;
-                case 'mine': openMine(); break;
+                case 'mine': state.reportOffset = 0; openMine(); break;
+                case 'report-prev': shiftReport(-1); break;
+                case 'report-next': shiftReport(1); break;
+                case 'report-save': saveReport(el); break;
                 case 'settings': openSettings(); break;
                 case 'set-mode': THEME.set(el.dataset.v); refreshTheme(); renderSettings(); break;
                 case 'set-skin': THEME.setSkin(el.dataset.v); refreshTheme(); renderSettings(); break;
@@ -1809,4 +2230,5 @@
     bind();
     renderAll();
     load();
+    loadCalendar();
 })();
