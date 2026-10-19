@@ -12,19 +12,37 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="theme-color" content="#ff6b6b">
+    <meta name="theme-color" content="#fff9f5">
 
-    <link rel="stylesheet" href="style.css?v=20261019b">
+    <link rel="stylesheet" href="style.css?v=20261020c">
+    <script src="theme.js?v=20261020c"></script>
 </head>
 <body>
     <div class="wrap">
         <header class="top">
             <h1>00 今天想吃什麼？</h1>
             <div class="top-right">
-                <span class="admin-badge">管理模式</span>
                 <button type="button" id="add-btn" class="btn primary sm add-btn" aria-label="新增店家"></button>
+                <button type="button" id="theme-btn" class="theme-btn" data-act="theme"></button>
             </div>
         </header>
+
+        <!-- 荷包蛋夥伴：依時間打招呼，天空跟著日夜變 -->
+        <section id="hero" class="hero" aria-label="問候">
+            <i class="star" style="left:18%;top:14px"></i><i class="star" style="left:46%;top:30px"></i>
+            <i class="star" style="left:70%;top:12px"></i><i class="star" style="left:86%;top:36px"></i>
+            <div id="orb" class="orb"><i class="orb-cut"></i></div>
+            <button type="button" id="egg" class="egg" data-act="egg" aria-label="戳一下荷包蛋">
+                <svg viewBox="0 0 48 44" aria-hidden="true">
+                    <ellipse cx="24" cy="25" rx="21" ry="16" fill="#fff" stroke="#d9cfc0" stroke-width="1.5"/>
+                    <circle cx="24" cy="24" r="11" fill="#ffb62e"/>
+                    <g class="eyes-open"><circle cx="20" cy="23" r="1.6" fill="#6b4200"/><circle cx="28" cy="23" r="1.6" fill="#6b4200"/></g>
+                    <g class="eyes-closed" fill="none" stroke="#6b4200" stroke-width="1.5" stroke-linecap="round"><path d="M17.5 23.5q2.5 2 5 0"/><path d="M25.5 23.5q2.5 2 5 0"/></g>
+                    <ellipse cx="17" cy="27.5" rx="2.2" ry="1.2" fill="#ff8f7a" opacity=".75"/><ellipse cx="31" cy="27.5" rx="2.2" ry="1.2" fill="#ff8f7a" opacity=".75"/>
+                </svg>
+            </button>
+            <p id="bubble" class="bubble"></p>
+        </section>
 
         <!-- 依類型篩選 -->
         <div class="toolbar">
@@ -128,7 +146,7 @@
 
     <div id="toast" class="toast" role="status"></div>
 
-    <script src="config.js?v=20261019b"></script>
-    <script src="app.js?v=20261019b"></script>
+    <script src="config.js?v=20261020c"></script>
+    <script src="app.js?v=20261020c"></script>
 </body>
 </html>

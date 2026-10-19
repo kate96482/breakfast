@@ -7,6 +7,9 @@
     const VIEW_KEY = 'breakfast-view';
     const PW_KEY = 'breakfast-admin';
     const WEEK = '日一二三四五六';
+    const EAT_KEY = 'breakfast-eaten';
+    const DAY_MS = 24 * 3600 * 1000;
+    const THEME = window.BreakfastTheme;
 
     // 試算表標題（第一列）↔ 欄位，和 apps-script/Code.gs 一致
     const FIELDS = {
@@ -33,6 +36,11 @@
         'lock': '<path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z"/><path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/><path d="M8 11v-4a4 4 0 1 1 8 0v4"/>',
         'dice-5': '<path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/><circle cx="8.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="8.5" r=".5" fill="currentColor"/><circle cx="15.5" cy="15.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="15.5" r=".5" fill="currentColor"/><circle cx="12" cy="12" r=".5" fill="currentColor"/>',
         'heart': '<path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/>',
+        'copy': '<path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z"/><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"/>',
+        'check': '<path d="M5 12l5 5l10 -10"/>',
+        'sun': '<path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7"/>',
+        'moon': '<path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"/>',
+        'brightness-half': '<path d="M12 9a3 3 0 0 0 0 6v-6z"/><path d="M6 6h3.5l2.5 -2.5l2.5 2.5h3.5v3.5l2.5 2.5l-2.5 2.5v3.5h-3.5l-2.5 2.5l-2.5 -2.5h-3.5v-3.5l-2.5 -2.5l2.5 -2.5z"/>',
         'tools-kitchen-2': '<path d="M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3"/>',
     };
     const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -50,6 +58,8 @@
     };
 
     const state = {
+        eaten: readEaten(),   // { 店家 id: 最後一次吃的時間 }，只存在這支手機
+        quip: false,          // 荷包蛋正在說悄悄話
         items: [],
         loaded: false,
         lastFetch: 0,
@@ -71,20 +81,40 @@
 
     /* ---------- 資料 ---------- */
 
+    // 試算表的「類型」沒填時，依店名（和愛吃的品項）猜；有填的以試算表為準
+    const TYPE_RULES = [
+        ['蛋餅', /蛋餅/, true],
+        ['漢堡', /漢堡|堡|麥味登|拉亞|摩斯|麥當勞/, true],
+        ['飯糰', /飯糰/, true],
+        ['中式', /豆漿|小籠包|饅頭|燒餅|包子/, true],
+        ['早午餐', /早午餐|brunch/i, true],
+        ['超商', /7-?11|7-?ELEVEN|全家|萊爾富|OK超商/i, false],
+        ['飲料', /咖啡|星巴|茶|飲|冰/, false],
+    ];
+
+    function guessTypes(name, note) {
+        return TYPE_RULES
+            .filter(([, re, withNote]) => re.test(withNote ? `${name} ${note}` : name))
+            .map(([type]) => type);
+    }
+
     function normalize(raw, i) {
         const text = (v) => String(v == null ? '' : v).trim();
         const http = (v) => (/^https?:\/\//i.test(text(v)) ? text(v) : '');
         const id = text(raw.id);
+        const name = text(raw.name);
+        const note = text(raw.note);
+        const explicit = text(raw.type).split(/[、,，/\s]+/).filter(Boolean);
         return {
             id: id || `row-${i}`,
             editable: !!id,
-            name: text(raw.name),
+            name,
             img: http(raw.img),
             phone: text(raw.phone),
             addr: text(raw.addr),
             link: http(raw.link),
-            note: text(raw.note),
-            types: text(raw.type).split(/[、,，/\s]+/).filter(Boolean),
+            note,
+            types: explicit.length ? explicit : guessTypes(name, note),
             hours: text(raw.hours),
         };
     }
@@ -140,7 +170,9 @@
     function readCache() {
         try {
             const list = JSON.parse(storage.get(CACHE_KEY) || 'null');
-            return Array.isArray(list) && list.length ? list : null;
+            if (!Array.isArray(list) || !list.length) return null;
+            // 舊版快取沒有自動猜的類型，讀出來時補上
+            return list.map((it) => (it.types && it.types.length ? it : Object.assign({}, it, { types: guessTypes(it.name, it.note) })));
         } catch (e) {
             return null;
         }
@@ -200,6 +232,18 @@
         return parts.join(' ');
     }
 
+    // 找下一個有營業的日子，例如「明早 06:00 開門」「週三 06:00 開門」
+    function nextOpenText(h, now) {
+        for (let d = 1; d <= 7; d++) {
+            const day = (now.getDay() + d) % 7;
+            if (h.off.has(day)) continue;
+            const t = fmtTime(h.open);
+            if (d === 1) return `${h.open < 600 ? '明早' : '明天'} ${t} 開門`;
+            return `週${WEEK[day]} ${t} 開門`;
+        }
+        return '已打烊';
+    }
+
     function statusOf(item, now = new Date()) {
         if (!item.hours) return null;
         const h = parseHours(item.hours);
@@ -210,7 +254,51 @@
         const isOpen = overnight ? (mins >= h.open || mins < h.close) : (mins >= h.open && mins < h.close);
         if (isOpen) return { text: `營業中・到 ${fmtTime(h.close)}`, cls: 'open' };
         if (mins < h.open) return { text: `${fmtTime(h.open)} 開門`, cls: 'soon' };
-        return { text: '已打烊', cls: 'closed' };
+        return { text: nextOpenText(h, now), cls: 'closed' };
+    }
+
+    /* ---------- 最近吃過（只記在這支手機） ---------- */
+
+    function readEaten() {
+        try {
+            const raw = JSON.parse(storage.get(EAT_KEY) || '{}') || {};
+            const now = Date.now();
+            const out = {};
+            Object.keys(raw).forEach((id) => { if (now - raw[id] < 90 * DAY_MS) out[id] = raw[id]; });
+            return out;
+        } catch (e) {
+            return {};
+        }
+    }
+
+    // 幾天前吃的（以日曆天算：今天 0、昨天 1），沒有紀錄回傳 null
+    function eatenAgo(id) {
+        const t = state.eaten[id];
+        if (!t) return null;
+        const a = new Date(t);
+        const b = new Date();
+        a.setHours(0, 0, 0, 0);
+        b.setHours(0, 0, 0, 0);
+        return Math.round((b - a) / DAY_MS);
+    }
+
+    function eatenText(id) {
+        const d = eatenAgo(id);
+        return d == null ? '' : d === 0 ? '今天' : d === 1 ? '昨天' : `${d} 天前`;
+    }
+
+    const recentlyEaten = (id) => { const d = eatenAgo(id); return d != null && d <= 1; };
+
+    function markEaten(id) {
+        state.eaten[id] = Date.now();
+        storage.set(EAT_KEY, JSON.stringify(state.eaten));
+        const key = CSS.escape(id);
+        document.querySelectorAll(`[data-last="${key}"]`).forEach((el) => { el.textContent = '上次吃：今天'; });
+        document.querySelectorAll(`[data-pill="${key}"]`).forEach((el) => { el.textContent = '今天吃過'; });
+        renderBar();
+        const item = findItem(id);
+        // 彈出視窗開著的時候，提示訊息會被蓋住，就不顯示
+        if (item && !document.querySelector('dialog[open]')) toast(`已記下：今天吃「${item.name}」`);
     }
 
     /* ---------- 篩選與抽籤 ---------- */
@@ -223,17 +311,64 @@
 
     const visible = () => (state.filter === '全部' ? state.items : state.items.filter((it) => it.types.includes(state.filter)));
 
-    // 抽籤時略過已打烊的店；如果全部都打烊了，就還是從全部裡抽
+    const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // 抽籤時略過已打烊、最近 2 天吃過的店；略過後一家都不剩，就不略過
     function drawPool() {
         const list = visible();
-        const usable = list.filter((it) => (statusOf(it) || {}).cls !== 'closed');
-        if (usable.length && usable.length < list.length) return { list: usable, skipped: list.length - usable.length };
-        return { list, skipped: 0 };
+        const open = list.filter((it) => (statusOf(it) || {}).cls !== 'closed');
+        let pool = open.length ? open : list;
+        const closed = open.length ? list.length - open.length : 0;
+        const fresh = pool.filter((it) => !recentlyEaten(it.id));
+        const eaten = fresh.length ? pool.length - fresh.length : 0;
+        if (fresh.length) pool = fresh;
+        return { list: pool, closed, eaten };
+    }
+
+    async function toasterAnimation(dlg) {
+        dlg.innerHTML = `
+            <div class="sheet-grip"></div>
+            <div class="pick rolling">
+                <p class="pick-label">吐司烤好了嗎…</p>
+                <div class="toaster" aria-hidden="true">
+                    <div class="toast-slice"><i class="toast-egg"></i></div>
+                    <div class="toaster-body"><i class="toaster-slot"></i></div>
+                    <div class="toaster-base"></div>
+                    <div class="toaster-lever"></div>
+                </div>
+                <h2 class="pick-name" tabindex="-1" autofocus>&nbsp;</h2>
+            </div>`;
+        const toaster = dlg.querySelector('.toaster');
+        await sleep(300);
+        toaster.classList.add('press');
+        await sleep(350);
+        toaster.classList.add('pop');
+        await sleep(950);
+    }
+
+    function celebrate(dlg) {
+        if (reduceMotion()) return;
+        // 震動只有 Android 有感，iPhone 的 Safari 不支援
+        if (navigator.vibrate) navigator.vibrate(30);
+        const box = document.createElement('div');
+        box.className = 'confetti';
+        box.setAttribute('aria-hidden', 'true');
+        const colors = ['#c93232', '#ffb62e', '#378add', '#1d9e75', '#7f77dd', '#ff8fa3'];
+        for (let i = 0; i < 26; i++) {
+            const piece = document.createElement('i');
+            piece.style.cssText = `left:${Math.round(10 + Math.random() * 80)}%;background:${colors[i % colors.length]};`
+                + `--dx:${Math.round(Math.random() * 120 - 60)}px;--rot:${Math.round(Math.random() * 720 - 360)}deg;`
+                + `animation-delay:${(Math.random() * 0.25).toFixed(2)}s;animation-duration:${(0.9 + Math.random() * 0.6).toFixed(2)}s`;
+            box.appendChild(piece);
+        }
+        dlg.appendChild(box);
+        setTimeout(() => box.remove(), 1800);
     }
 
     async function doDraw() {
         if (state.rolling) return;
-        const { list, skipped } = drawPool();
+        const pool = drawPool();
+        const list = pool.list;
         if (!list.length) {
             toast('這個類型還沒有店家');
             return;
@@ -243,54 +378,76 @@
         const dlg = $('#pick');
         if (!dlg.open) dlg.showModal();
 
-        if (list.length > 1 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        if (list.length > 1 && !reduceMotion()) {
             state.rolling = true;
-            dlg.innerHTML = `
-                <div class="sheet-grip"></div>
-                <div class="pick rolling">
-                    <p class="pick-label">抽籤中…</p>
-                    <h2 class="pick-name" id="roll-name" tabindex="-1" autofocus>&nbsp;</h2>
-                    <div class="photo">${icon('dice-5')}</div>
-                </div>`;
-            const nameEl = $('#roll-name');
-            for (let i = 0; i < 14; i++) {
-                nameEl.textContent = list[Math.floor(Math.random() * list.length)].name;
-                await sleep(40 + i * i);
-            }
+            await toasterAnimation(dlg);
             state.rolling = false;
+            if (!dlg.open) return; // 烤的時候被關掉了
         }
         state.pick = final.id;
-        if (navigator.vibrate) navigator.vibrate(20);
-        dlg.innerHTML = pickHtml(final, list.length, skipped);
+        dlg.innerHTML = pickHtml(final, pool);
+        celebrate(dlg);
     }
 
-    function pickHtml(item, total, skipped) {
+    // 抽到之後，最大的按鈕是「點餐」；沒有點餐網址就換成打電話
+    function pickActions(item) {
+        const tel = telOf(item);
+        const map = mapUrl(item);
+        const eat = `data-eat="${esc(item.id)}"`;
+        const main = item.link
+            ? `<a class="act primary big" ${eat} href="${esc(item.link)}" target="_blank" rel="noopener">${icon('shopping-bag')}線上點餐</a>`
+            : tel
+                ? `<a class="act primary big" ${eat} href="tel:${esc(tel)}">${icon('phone')}打電話點餐</a>`
+                : `<a class="act primary big" href="${esc(map)}" target="_blank" rel="noopener">${icon('map-2')}導航過去</a>`;
+        const others = [
+            item.link && tel ? `<a class="act" ${eat} href="tel:${esc(tel)}">${icon('phone')}電話</a>` : '',
+            item.link || tel ? `<a class="act" href="${esc(map)}" target="_blank" rel="noopener">${icon('map-2')}地圖</a>` : '',
+            `<button type="button" class="act outline" data-act="draw">${icon('arrows-shuffle')}換一家</button>`,
+        ].join('');
+        return `${main}<div class="actions">${others}</div>`;
+    }
+
+    function pickHtml(item, pool) {
         const from = state.filter === '全部' ? '' : `「${state.filter}」`;
+        const skipped = [pool.closed ? `${pool.closed} 家打烊` : '', pool.eaten ? `${pool.eaten} 家最近吃過` : ''].filter(Boolean).join('、');
+        const ago = eatenText(item.id);
         return `
             <div class="sheet-grip"></div>
             <div class="pick reveal">
                 <p class="pick-label">今天就吃</p>
                 <h2 class="pick-name" tabindex="-1" autofocus>${esc(item.name)}</h2>
-                ${photoHtml(item)}
-                ${item.note ? `<div class="note"><b>00 愛吃</b>${esc(item.note)}</div>` : ''}
-                ${actionsHtml(item)}
-                <button type="button" class="btn primary big full" data-act="draw">${icon('arrows-shuffle')}再抽一次</button>
-                <p class="pick-hint">從${from} ${total} 家裡抽${skipped ? `，已略過 ${skipped} 家打烊` : ''}</p>
+                <p class="last-eaten" data-last="${esc(item.id)}">${ago ? `上次吃：${ago}` : ''}</p>
+                ${photoHtml(item, { w: 900 })}
+                ${noteHtml(item)}
+                ${pickActions(item)}
+                <p class="pick-hint">從${from} ${pool.list.length} 家裡抽${skipped ? `（略過 ${skipped}）` : ''}</p>
             </div>`;
     }
 
     /* ---------- 畫面 ---------- */
 
-    function photoHtml(item, { tags = false, status = true, edit = false } = {}) {
+    // 雲端硬碟的照片可以指定大小（網址結尾的 =w1000），依畫面需要的大小載入，比較省流量
+    const imgSrc = (url, w) => String(url).replace(/^(https:\/\/lh3\.googleusercontent\.com\/d\/[^=]+)=w\d+$/, `$1=w${w}`);
+
+    function photoHtml(item, { tags = false, status = true, edit = false, pill = false, w = 640 } = {}) {
         const st = status ? statusOf(item) : null;
+        const ago = pill ? eatenAgo(item.id) : null;
         return `
             <div class="photo">
                 ${icon('tools-kitchen-2')}
-                ${item.img ? `<img src="${esc(item.img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
+                ${item.img ? `<img src="${esc(imgSrc(item.img, w))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}
                 ${tags && item.types.length ? `<div class="tags">${item.types.slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
                 ${st ? `<span class="status ${st.cls}">${esc(st.text)}</span>` : ''}
+                ${ago != null && ago <= 6 ? `<span class="last-pill" data-pill="${esc(item.id)}">${eatenText(item.id)}吃過</span>` : ''}
                 ${edit && item.editable ? `<button type="button" class="edit-fab" data-act="edit" data-id="${esc(item.id)}" aria-label="修改 ${esc(item.name)}">${icon('pencil')}</button>` : ''}
             </div>`;
+    }
+
+    // 00 愛吃的品項，右邊有一鍵複製（貼到 LINE 點餐很方便）
+    function noteHtml(item) {
+        if (!item.note) return '';
+        return `<div class="note"><span class="note-text"><b>00 愛吃</b>${esc(item.note)}</span>`
+            + `<button type="button" class="copy" data-act="copy" data-id="${esc(item.id)}" aria-label="複製愛吃的品項">${icon('copy')}</button></div>`;
     }
 
     // 卡片固定顯示四行，沒填的用淡色提示，每張卡片才會一樣整齊
@@ -299,17 +456,20 @@
         return row('map-pin', item.addr || '沒有地址', !item.addr)
             + row('clock', item.hours || '營業時間還沒填', !item.hours)
             + row('phone', item.phone || '沒有電話', !item.phone)
-            + (item.note ? `<div class="note"><b>00 愛吃</b>${esc(item.note)}</div>` : row('heart', '00 愛吃：還沒記錄', true));
+            + (item.note ? noteHtml(item) : row('heart', '00 愛吃：還沒記錄', true));
     }
 
+    const telOf = (item) => item.phone.replace(/[^\d+#]/g, '');
+    const mapUrl = (item) => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(`${item.name} ${item.addr}`.trim());
+
     function actionsHtml(item) {
-        const tel = item.phone.replace(/[^\d+#]/g, '');
-        const map = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(`${item.name} ${item.addr}`.trim());
+        const tel = telOf(item);
+        const eat = `data-eat="${esc(item.id)}"`;
         return `
             <div class="actions">
-                ${tel ? `<a class="act" href="tel:${esc(tel)}">${icon('phone')}電話</a>` : ''}
-                <a class="act" href="${esc(map)}" target="_blank" rel="noopener">${icon('map-2')}地圖</a>
-                ${item.link ? `<a class="act primary" href="${esc(item.link)}" target="_blank" rel="noopener">${icon('shopping-bag')}點餐</a>` : ''}
+                ${tel ? `<a class="act" ${eat} href="tel:${esc(tel)}">${icon('phone')}電話</a>` : ''}
+                <a class="act" href="${esc(mapUrl(item))}" target="_blank" rel="noopener">${icon('map-2')}地圖</a>
+                ${item.link ? `<a class="act primary" ${eat} href="${esc(item.link)}" target="_blank" rel="noopener">${icon('shopping-bag')}點餐</a>` : ''}
             </div>`;
     }
 
@@ -350,10 +510,19 @@
         else renderSwipe(list);
     }
 
-    function renderSwipe(list) {
+    // 營業中的排前面，沒開的排最後；同一種狀態維持試算表原本的順序
+    const STATUS_ORDER = { open: 0, soon: 1, none: 2, closed: 3 };
+    function sortByStatus(list) {
+        if (!list.some((it) => it.hours)) return list;
+        const rank = (it) => STATUS_ORDER[(statusOf(it) || { cls: 'none' }).cls];
+        return list.map((it, i) => ({ it, i, r: rank(it) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.it);
+    }
+
+    function renderSwipe(source) {
+        const list = sortByStatus(source);
         const cards = list.map((item) => `
             <article class="scard" data-id="${esc(item.id)}">
-                ${photoHtml(item, { tags: true, edit: true })}
+                ${photoHtml(item, { tags: true, edit: true, pill: true })}
                 <div class="body">
                     <h3 class="name">${esc(item.name)}</h3>
                     ${infoRows(item)}
@@ -418,7 +587,7 @@
     function renderGrid(list) {
         const card = (item) => `
             <div class="gcard" role="button" tabindex="0" data-act="detail" data-id="${esc(item.id)}" aria-label="${esc(item.name)}">
-                ${photoHtml(item, { edit: true })}
+                ${photoHtml(item, { edit: true, w: 480 })}
                 <div class="body">
                     <h3 class="name">${esc(item.name)}</h3>
                     ${item.note ? `<div class="like">愛吃 ${esc(item.note)}</div>` : ''}
@@ -442,7 +611,104 @@
         $('#admin-btn').innerHTML = isAdmin() ? '離開管理模式' : `${icon('lock')} 管理`;
     }
 
+    /* ---------- 荷包蛋夥伴與日夜模式 ---------- */
+
+    function greeting(now = new Date()) {
+        const h = now.getHours();
+        const weekend = now.getDay() === 0 || now.getDay() === 6;
+        const hasHours = state.loaded && state.items.some((it) => it.hours);
+        const open = state.items.filter((it) => (statusOf(it, now) || {}).cls === 'open').length;
+        if (h < 5) return '還這麼早？再睡一下，早餐店還沒開喔';
+        if (h < 10) return weekend ? (h < 8 ? '週末還這麼早起？今天想吃什麼？' : '週末慢慢來，今天想吃什麼？') : '早安！今天想吃什麼？';
+        if (h < 14) {
+            if (!hasHours) return '早餐時間快結束了，要快一點喔';
+            if (!open) return '早餐店差不多都收了，改吃午餐吧';
+            return weekend ? `睡過頭了嗎？還有 ${open} 家開著` : `早餐時間快結束了，還有 ${open} 家開著`;
+        }
+        if (h < 18) return '下午了，早餐店都收攤囉';
+        return '晚安，先看看明天早上吃什麼吧';
+    }
+
+    function renderHero() {
+        const hero = $('#hero');
+        if (!hero) return;
+        const now = new Date();
+        const dark = document.documentElement.dataset.theme === 'dark';
+        const h = now.getHours() + now.getMinutes() / 60;
+        // 太陽（或月亮）依時間在天空劃一道弧線；手動切到跟時間不合的模式時，停在中間
+        let p;
+        if (dark) p = (h >= 18 || h < 5) ? (h >= 18 ? h - 18 : h + 6) / 11 : 0.5;
+        else p = (h >= 5 && h < 18) ? (h - 5) / 13 : 0.5;
+        hero.classList.toggle('night', dark);
+        const orb = $('#orb');
+        orb.style.left = `${Math.round(8 + p * 70)}%`;
+        orb.style.top = `${Math.round(6 + 34 * Math.pow(2 * p - 1, 2))}px`;
+        if (!state.quip) $('#bubble').textContent = greeting(now);
+    }
+
+    const QUIPS = ['別戳啦，我會破掉的', '肚子餓了嗎？按下面的按鈕吧', '我是半熟的喔', '要加蛋嗎？', '今天的運氣不錯喔'];
+    let quipTimer;
+    function pokeEgg() {
+        const egg = $('#egg');
+        egg.classList.remove('wiggle');
+        void egg.offsetWidth;
+        egg.classList.add('wiggle');
+        state.quip = true;
+        $('#bubble').textContent = QUIPS[Math.floor(Math.random() * QUIPS.length)];
+        clearTimeout(quipTimer);
+        quipTimer = setTimeout(() => { state.quip = false; renderHero(); }, 2800);
+    }
+
+    const MODE_TEXT = { auto: '自動：18:00 後轉夜間', day: '固定白天', night: '固定夜間' };
+
+    function renderTheme() {
+        const mode = THEME.get();
+        const btn = $('#theme-btn');
+        btn.innerHTML = icon(mode === 'auto' ? 'brightness-half' : mode === 'day' ? 'sun' : 'moon');
+        btn.setAttribute('aria-label', `切換日夜模式，目前是${MODE_TEXT[mode]}`);
+    }
+
+    function refreshTheme() {
+        THEME.apply(THEME.get());
+        renderTheme();
+        renderHero();
+    }
+
+    function cycleTheme() {
+        const order = ['auto', 'day', 'night'];
+        const next = order[(order.indexOf(THEME.get()) + 1) % order.length];
+        const resolved = THEME.set(next);
+        renderTheme();
+        renderHero();
+        toast(next === 'auto' ? `${MODE_TEXT.auto}（現在是${resolved === 'dark' ? '夜間' : '白天'}）` : MODE_TEXT[next]);
+    }
+
+    async function copyNote(btn, id) {
+        const item = findItem(id);
+        if (!item || !item.note) return;
+        let ok = false;
+        try {
+            await navigator.clipboard.writeText(item.note);
+            ok = true;
+        } catch (e) {
+            // 少數環境不能用剪貼簿 API，改用舊方法
+            const ta = document.createElement('textarea');
+            ta.value = item.note;
+            ta.style.cssText = 'position:fixed;opacity:0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { ok = document.execCommand('copy'); } catch (err) { /* 忽略 */ }
+            ta.remove();
+        }
+        // 在彈出視窗裡，提示訊息會被蓋住，所以直接讓按鈕變成打勾
+        btn.innerHTML = icon(ok ? 'check' : 'x');
+        setTimeout(() => { btn.innerHTML = icon('copy'); }, 1500);
+        if (!document.querySelector('dialog[open]')) toast(ok ? '已複製，可以貼到 LINE 了' : '複製失敗，請手動選取');
+    }
+
     function renderAll() {
+        renderTheme();
+        renderHero();
         document.body.classList.toggle('admin', isAdmin());
         renderChips();
         renderBar();
@@ -455,17 +721,19 @@
         const item = findItem(id);
         if (!item) return;
         const st = statusOf(item);
+        const ago = eatenText(id);
         const dlg = $('#detail');
         dlg.innerHTML = `
             <div class="detail">
                 <div style="position:relative">
                     <div class="sheet-grip on-photo"></div>
                     <button type="button" class="icon-btn close" data-close aria-label="關閉">${icon('x')}</button>
-                    ${photoHtml(item, { tags: true, status: false, edit: true })}
+                    ${photoHtml(item, { tags: true, status: false, edit: true, pill: true, w: 900 })}
                 </div>
                 <div class="body">
                     <h2 class="name" tabindex="-1" autofocus>${esc(item.name)}</h2>
                     ${st ? `<span class="status ${st.cls}">${esc(st.text)}</span>` : ''}
+                    <p class="last-eaten" data-last="${esc(id)}">${ago ? `上次吃：${ago}` : ''}</p>
                     ${infoRows(item)}
                     ${actionsHtml(item)}
                 </div>
@@ -766,6 +1034,10 @@
             // 點彈窗外的灰色區域就關閉
             if (e.target instanceof HTMLDialogElement) { e.target.close(); return; }
 
+            // 按了電話或點餐，就記成今天吃這家（照常跳轉，不攔截）
+            const eat = e.target.closest('[data-eat]');
+            if (eat) markEaten(eat.dataset.eat);
+
             const el = e.target.closest('[data-act]');
             if (!el) return;
             const id = el.dataset.id;
@@ -784,6 +1056,9 @@
                     renderAll();
                     break;
                 case 'retry': load(); break;
+                case 'copy': copyNote(el, id); break;
+                case 'theme': cycleTheme(); break;
+                case 'egg': pokeEgg(); break;
                 default: break;
             }
         });
@@ -844,10 +1119,19 @@
 
         // 從背景切回來時，更新營業狀態，超過一分鐘就順便抓新資料
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden || !state.loaded) return;
+            if (document.hidden) return;
+            refreshTheme();
+            if (!state.loaded) return;
             if (Date.now() - state.lastFetch > 60 * 1000) load();
             else renderAll();
         });
+
+        // 開著不動的時候，每分鐘更新一次日夜模式、問候語和抽籤範圍（不動卡片，免得看到一半跳掉）
+        setInterval(() => {
+            if (document.hidden) return;
+            refreshTheme();
+            renderBar();
+        }, 60 * 1000);
     }
 
     bind();

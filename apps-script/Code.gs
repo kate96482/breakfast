@@ -91,6 +91,50 @@ function setup() {
     : '設定完成，但還沒設定密碼：請到「專案設定 → 指令碼屬性」新增 ADMIN_PASSWORD。');
 }
 
+/**
+ * 把「照片」欄裡不在雲端硬碟的照片（例如 postimg）搬進雲端硬碟，只需要做一次。
+ * 搬完之後，網頁會依畫面大小載入照片，手機流量大約只要原本的 1/5。
+ * 舊網址會留在儲存格的註解裡，想還原可以從註解複製回去；失敗的店會跳過，原本的照片不受影響。
+ * 在 Apps Script 編輯器選這個函式按「執行」，不需要重新部署。
+ */
+function migratePhotos() {
+  const sheet = getSheet_();
+  const cols = headerMap_(sheet);
+  if (cols.img < 0 || cols.name < 0) throw new Error('找不到「店名」或「照片」欄位');
+  const last = sheet.getLastRow();
+  if (last < 2) return;
+
+  const urls = sheet.getRange(2, cols.img + 1, last - 1, 1).getDisplayValues();
+  const names = sheet.getRange(2, cols.name + 1, last - 1, 1).getDisplayValues();
+  let moved = 0;
+  let skipped = 0;
+  const failed = [];
+
+  urls.forEach((row, i) => {
+    const url = row[0].trim();
+    const name = names[i][0].trim();
+    if (!name) return;
+    if (!/^https?:\/\//i.test(url) || url.indexOf('googleusercontent.com') >= 0) { skipped += 1; return; }
+    try {
+      const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+      if (res.getResponseCode() !== 200) throw new Error('下載失敗（HTTP ' + res.getResponseCode() + '）');
+      const blob = res.getBlob();
+      const mime = blob.getContentType();
+      const newUrl = savePhoto_({ mime: mime, base64: Utilities.base64Encode(blob.getBytes()) }, name);
+      const cell = sheet.getRange(i + 2, cols.img + 1);
+      cell.setNumberFormat('@');
+      cell.setValue(newUrl);
+      cell.setNote('舊網址：' + url);
+      moved += 1;
+    } catch (err) {
+      failed.push(name + '：' + String(err.message || err));
+    }
+  });
+
+  Logger.log('搬完了：' + moved + ' 張已搬進雲端硬碟，' + skipped + ' 張原本就在雲端硬碟或沒有照片'
+    + (failed.length ? '，' + failed.length + ' 張失敗：\n' + failed.join('\n') : '。'));
+}
+
 /* ---------- 讀取 ---------- */
 
 function readAll_(sheet) {
