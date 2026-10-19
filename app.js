@@ -15,6 +15,7 @@
     const METHOD_KEY = 'breakfast-method';
     const SHAKE_KEY = 'breakfast-shake';
     const FORTUNE_KEY = 'breakfast-fortune-day';
+    const PIN_KEY = 'breakfast-pin';
 
     // 試算表標題（第一列）↔ 欄位，和 apps-script/Code.gs 一致
     const FIELDS = {
@@ -56,6 +57,7 @@
         'notebook': '<path d="M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-11a1 1 0 0 1 -1 -1v-14a1 1 0 0 1 1 -1m3 0v18"/><path d="M13 8l2 0"/><path d="M13 12l2 0"/>',
         'trophy': '<path d="M8 21l8 0"/><path d="M12 17l0 4"/><path d="M7 4l10 0"/><path d="M17 4v8a5 5 0 0 1 -10 0v-8"/><path d="M5 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/><path d="M19 9m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>',
         'settings': '<path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/>',
+        'bookmark': '<path d="M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4z"/>',
         'tools-kitchen-2': '<path d="M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3"/>',
     };
     const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -77,6 +79,7 @@
         log: readLog(),       // 週曆用：[[店家 id, 時間], …]
         passport: readPassport(), // 護照用：{ 店家 id: 第一次吃的時間 }
         quip: false,          // 荷包蛋正在說悄悄話
+        override: null,       // 手動切換「抽現在／抽明天」，只在這個時段有效
         items: [],
         loaded: false,
         lastFetch: 0,
@@ -412,16 +415,43 @@
 
     const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // 抽籤時略過已打烊、最近 2 天吃過的店；略過後一家都不剩，就不略過
-    function drawPool() {
+    // 抽籤的對象：14:00 以前抽「現在」營業的店，14:00 以後抽「明天早餐」（晚上抽，通常是在決定明天吃什麼）
+    // 結果面板裡可以手動切換；換到下一個時段（過了 14:00 或隔天）就恢復自動
+    const TOMORROW_FROM = 14;
+    const autoMode = () => (new Date().getHours() >= TOMORROW_FROM ? 'tomorrow' : 'today');
+    const effectiveMode = () => (state.override && state.override.base === autoMode() ? state.override.mode : autoMode());
+    const tomorrowDate = () => { const d = new Date(); d.setDate(d.getDate() + 1); return d; };
+    const restsOn = (item, dow) => parseHours(item.hours).off.has(dow);
+
+    // 明天的營業時間，例如「明天 06:00–13:00 營業」
+    function tomorrowStatus(item) {
+        if (!item.hours) return null;
+        const h = parseHours(item.hours);
+        if (h.off.has(tomorrowDate().getDay())) return { text: '明天公休', cls: 'closed' };
+        if (h.open == null) return { text: `明天 ${item.hours}`, cls: 'soon' };
+        return { text: `明天 ${fmtTime(h.open)}–${fmtTime(h.close)} 營業`, cls: 'soon' };
+    }
+
+    // 抽「現在」：略過已打烊的；抽「明天」：略過明天公休的；都略過最近 2 天吃過的。略過後一家都不剩，就不略過
+    function drawPool(mode = effectiveMode()) {
         const list = visible();
-        const open = list.filter((it) => (statusOf(it) || {}).cls !== 'closed');
-        let pool = open.length ? open : list;
-        const closed = open.length ? list.length - open.length : 0;
+        let pool;
+        let closed = 0;
+        let rest = 0;
+        if (mode === 'tomorrow') {
+            const dow = tomorrowDate().getDay();
+            const work = list.filter((it) => !restsOn(it, dow));
+            pool = work.length ? work : list;
+            rest = work.length ? list.length - work.length : 0;
+        } else {
+            const open = list.filter((it) => (statusOf(it) || {}).cls !== 'closed');
+            pool = open.length ? open : list;
+            closed = open.length ? list.length - open.length : 0;
+        }
         const fresh = pool.filter((it) => !recentlyEaten(it.id));
         const eaten = fresh.length ? pool.length - fresh.length : 0;
         if (fresh.length) pool = fresh;
-        return { list: pool, closed, eaten };
+        return { list: pool, closed, rest, eaten, mode };
     }
 
     async function toasterAnimation(dlg) {
@@ -516,16 +546,21 @@
         celebrate(dlg);
     }
 
+    // 點餐入口：有網址用線上點餐，沒有就打電話，再沒有就導航
+    function orderLink(item, extra, labels) {
+        const tel = telOf(item);
+        const eat = `data-eat="${esc(item.id)}"`;
+        if (item.link) return `<a class="act primary ${extra}" ${eat} href="${esc(item.link)}" target="_blank" rel="noopener">${icon('shopping-bag')}${labels[0]}</a>`;
+        if (tel) return `<a class="act primary ${extra}" ${eat} href="tel:${esc(tel)}">${icon('phone')}${labels[1]}</a>`;
+        return `<a class="act primary ${extra}" href="${esc(mapUrl(item))}" target="_blank" rel="noopener">${icon('map-2')}${labels[2]}</a>`;
+    }
+
     // 抽到之後，最大的按鈕是「點餐」；沒有點餐網址就換成打電話
     function pickActions(item) {
         const tel = telOf(item);
         const map = mapUrl(item);
         const eat = `data-eat="${esc(item.id)}"`;
-        const main = item.link
-            ? `<a class="act primary big" ${eat} href="${esc(item.link)}" target="_blank" rel="noopener">${icon('shopping-bag')}線上點餐</a>`
-            : tel
-                ? `<a class="act primary big" ${eat} href="tel:${esc(tel)}">${icon('phone')}打電話點餐</a>`
-                : `<a class="act primary big" href="${esc(map)}" target="_blank" rel="noopener">${icon('map-2')}導航過去</a>`;
+        const main = orderLink(item, 'big', ['線上點餐', '打電話點餐', '導航過去']);
         const others = [
             item.link && tel ? `<a class="act" ${eat} href="tel:${esc(tel)}">${icon('phone')}電話</a>` : '',
             item.link || tel ? `<a class="act" href="${esc(map)}" target="_blank" rel="noopener">${icon('map-2')}地圖</a>` : '',
@@ -534,20 +569,111 @@
         return `${main}<div class="actions">${others}</div>`;
     }
 
+    /* ---------- 記住明天要吃的店 ---------- */
+
+    function readPin() {
+        try {
+            const p = JSON.parse(storage.get(PIN_KEY) || 'null');
+            if (!p) return null;
+            if (!p.id || !p.day || Date.now() > p.until) { storage.set(PIN_KEY, null); return null; } // 過了那天就清掉
+            return p;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearPin() {
+        storage.set(PIN_KEY, null);
+        renderPin();
+        renderHero();
+    }
+
+    function togglePin(id) {
+        const day = tomorrowDate();
+        const cur = readPin();
+        if (cur && cur.id === id && cur.day === dayKey(day)) {
+            storage.set(PIN_KEY, null);
+        } else {
+            const end = new Date(day);
+            end.setHours(23, 59, 59, 999);
+            storage.set(PIN_KEY, JSON.stringify({ id, day: dayKey(day), until: end.getTime() }));
+        }
+        renderPin();
+        renderHero();
+    }
+
+    // 今天要吃的那家（昨晚記住的）
+    function todaysPin() {
+        const pin = readPin();
+        if (!pin || pin.day !== dayKey()) return null;
+        const item = findItem(pin.id);
+        return item ? { pin, item } : null;
+    }
+
+    function pinButtonHtml(id) {
+        const pin = readPin();
+        const on = !!pin && pin.id === id && pin.day === dayKey(tomorrowDate());
+        return `<button type="button" class="act pin${on ? ' on' : ''}" data-act="pin" data-id="${esc(id)}" aria-pressed="${on}">${icon('bookmark')}${on ? '已記住，明早提醒你（點一下取消）' : '記住這家，明早提醒我'}</button>`;
+    }
+
+    // 首頁最上面：晚上記住之後，顯示一條「明天早餐」；隔天早上變成完整的卡片，直接點餐
+    function renderPin() {
+        const el = $('#pin');
+        const pin = state.loaded ? readPin() : null;
+        const item = pin && findItem(pin.id);
+        if (!item) {
+            el.hidden = true;
+            el.innerHTML = '';
+            return;
+        }
+        el.hidden = false;
+        if (pin.day === dayKey()) {
+            const st = statusOf(item);
+            el.innerHTML = `
+                <div class="pin-card">
+                    ${photoHtml(item, { status: false, w: 480 })}
+                    <div class="pin-body">
+                        <span class="pin-label">昨晚決定的今天早餐</span>
+                        <h3 class="name">${esc(item.name)}</h3>
+                        ${st ? `<span class="status ${st.cls}">${esc(st.text)}</span>` : ''}
+                        <div class="actions">${orderLink(item, '', ['點餐', '打電話', '導航'])}<button type="button" class="act" data-act="unpin-redraw">重抽</button></div>
+                    </div>
+                </div>`;
+        } else {
+            el.innerHTML = `
+                <div class="pin-compact">${icon('bookmark')}<span class="pin-text">明天早餐：<b>${esc(item.name)}</b></span>
+                    <button type="button" class="link-btn" data-act="unpin">取消</button></div>`;
+        }
+    }
+
+    function switchDrawMode() {
+        if (state.rolling) return;
+        state.override = { mode: effectiveMode() === 'tomorrow' ? 'today' : 'tomorrow', base: autoMode() };
+        renderBar();
+        doDraw();
+    }
+
     function pickHtml(item, pool) {
+        const tomorrow = pool.mode === 'tomorrow';
         const from = state.filter === '全部' ? '' : `「${state.filter}」`;
-        const skipped = [pool.closed ? `${pool.closed} 家打烊` : '', pool.eaten ? `${pool.eaten} 家最近吃過` : ''].filter(Boolean).join('、');
+        const skipped = [
+            pool.closed ? `${pool.closed} 家打烊` : '',
+            pool.rest ? `${pool.rest} 家明天公休` : '',
+            pool.eaten ? `${pool.eaten} 家最近吃過` : '',
+        ].filter(Boolean).join('、');
         const ago = eatenText(item.id);
         return `
             <div class="sheet-grip"></div>
             <div class="pick reveal">
-                <p class="pick-label">今天就吃</p>
+                <p class="pick-label">${tomorrow ? '明天早餐就吃' : '今天就吃'}</p>
                 <h2 class="pick-name" tabindex="-1" autofocus>${esc(item.name)}</h2>
                 <p class="last-eaten" data-last="${esc(item.id)}">${ago ? `上次吃：${ago}` : ''}</p>
-                ${photoHtml(item, { w: 900 })}
+                ${photoHtml(item, { w: 900, forceStatus: tomorrow ? tomorrowStatus(item) : undefined })}
                 ${noteHtml(item)}
                 ${pickActions(item)}
+                ${tomorrow ? pinButtonHtml(item.id) : ''}
                 <p class="pick-hint">從${from} ${pool.list.length} 家裡抽${skipped ? `（略過 ${skipped}）` : ''}</p>
+                <button type="button" class="link-btn" data-act="draw-mode">${tomorrow ? '改抽現在還開著的店' : '改抽明天早餐'}</button>
             </div>`;
     }
 
@@ -556,8 +682,8 @@
     // 雲端硬碟的照片可以指定大小（網址結尾的 =w1000），依畫面需要的大小載入，比較省流量
     const imgSrc = (url, w) => String(url).replace(/^(https:\/\/lh3\.googleusercontent\.com\/d\/[^=]+)=w\d+$/, `$1=w${w}`);
 
-    function photoHtml(item, { tags = false, status = true, edit = false, pill = false, w = 640 } = {}) {
-        const st = status ? statusOf(item) : null;
+    function photoHtml(item, { tags = false, status = true, edit = false, pill = false, w = 640, forceStatus } = {}) {
+        const st = forceStatus !== undefined ? forceStatus : status ? statusOf(item) : null;
         const ago = pill ? eatenAgo(item.id) : null;
         return `
             <div class="photo">
@@ -601,7 +727,9 @@
     }
 
     function renderBar() {
-        $('#draw-btn').disabled = !state.loaded || !drawPool().list.length;
+        const mode = effectiveMode();
+        $('#draw-btn').innerHTML = `${icon('dice-5')}${mode === 'tomorrow' ? '幫我抽明天早餐' : '幫我抽一家'}`;
+        $('#draw-btn').disabled = !state.loaded || !drawPool(mode).list.length;
     }
 
     function renderChips() {
@@ -949,6 +1077,11 @@
         const weekend = now.getDay() === 0 || now.getDay() === 6;
         const hasHours = state.loaded && state.items.some((it) => it.hours);
         const open = state.items.filter((it) => (statusOf(it, now) || {}).cls === 'open').length;
+        const today = todaysPin();
+        if (today && h >= 5 && h < 14) return `早安！昨晚決定了今天吃「${today.item.name}」`;
+        const pin = readPin();
+        const tomorrowItem = pin && pin.day === dayKey(tomorrowDate()) && findItem(pin.id);
+        if (tomorrowItem && h >= 14) return `已記住明天吃「${tomorrowItem.name}」，晚安！`;
         if (h < 5) return '還這麼早？再睡一下，早餐店還沒開喔';
         if (h < 10) return weekend ? (h < 8 ? '週末還這麼早起？今天想吃什麼？' : '週末慢慢來，今天想吃什麼？') : '早安！今天想吃什麼？';
         if (h < 14) {
@@ -1049,6 +1182,7 @@
     function renderAll() {
         renderTheme();
         renderHero();
+        renderPin();
         document.body.classList.toggle('admin', isAdmin());
         renderChips();
         renderBar();
@@ -1411,6 +1545,10 @@
                     renderSettings();
                     break;
                 case 'toggle-shake': toggleShake(); break;
+                case 'draw-mode': switchDrawMode(); break;
+                case 'pin': togglePin(id); el.outerHTML = pinButtonHtml(id); break;
+                case 'unpin': clearPin(); break;
+                case 'unpin-redraw': clearPin(); doDraw(); break;
                 default: break;
             }
         });
@@ -1483,6 +1621,7 @@
             if (document.hidden) return;
             refreshTheme();
             renderBar();
+            renderPin();
         }, 60 * 1000);
     }
 

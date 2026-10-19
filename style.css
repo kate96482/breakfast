@@ -438,6 +438,25 @@ textarea { resize: vertical; }
 .err { color: var(--err); font-size: 0.85rem; margin: 0; min-height: 0; }
 .err:empty { display: none; }
 
+/* 記住的那家（首頁最上面） */
+.pin { margin: 0 0 14px; }
+.pin[hidden] { display: none; }
+.pin-card { display: flex; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+.pin-card .photo { width: 104px; flex: none; }
+.pin-body { flex: 1; min-width: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.pin-label { font-size: 0.78rem; color: var(--text-3); }
+.pin-body .name { font-size: 1.02rem; }
+.pin-body .actions .act:last-child:not(.primary) { flex: 0 0 64px; }
+.pin-compact {
+    display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 4px 0 12px; border-radius: 12px;
+    background: var(--primary-soft); color: var(--primary-text); font-size: 0.9rem;
+}
+.pin-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pin-compact .link-btn { color: inherit; }
+.act.pin { gap: 6px; }
+.act.pin.on { background: var(--primary-soft); color: var(--primary-text); }
+.pick .link-btn { align-self: center; margin-top: -6px; }
+
 /* 設定面板 */
 .settings, .mine { display: flex; flex-direction: column; gap: 22px; }
 .settings h3, .mine h3 { margin: 0 0 10px; font-size: 0.92rem; color: var(--text-2); display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
