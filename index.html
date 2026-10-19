@@ -14,8 +14,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="theme-color" content="#fff9f5">
 
-    <link rel="stylesheet" href="style.css?v=20261022b">
-    <script src="theme.js?v=20261022b"></script>
+    <link rel="stylesheet" href="style.css?v=20261022c">
+    <script src="theme.js?v=20261022c"></script>
 </head>
 <body>
     <div class="wrap">
@@ -64,6 +64,7 @@
         <footer class="foot">
             <span id="foot-info"></span>
             <nav class="foot-links">
+                <button type="button" id="notes-btn" class="link-btn" hidden></button>
                 <button type="button" id="admin-btn" class="link-btn"></button>
             </nav>
         </footer>
@@ -93,6 +94,27 @@
 
     <!-- 月報圖片（不能直接分享的時候，改成在這裡長按存圖） -->
     <dialog id="shot" class="sheet"></dialog>
+
+    <!-- 留言給 00（管理模式）：選一天寫一句話，那天荷包蛋會說出來 -->
+    <dialog id="notes" class="sheet tall">
+        <div class="sheet-head">
+            <h2 tabindex="-1" autofocus>留言給 00</h2>
+            <button type="button" class="icon-btn" data-close aria-label="關閉"></button>
+        </div>
+        <form id="note-form" class="pad form notes" novalidate>
+            <p class="hint">選一天，寫一句話。那天 00 打開網頁，荷包蛋就會把這句話說出來。同一天只會有一則，再寫一次就是取代。</p>
+            <label class="field">哪一天
+                <input id="note-date" type="date" required>
+            </label>
+            <label class="field">要說的話
+                <input id="note-text" maxlength="50" placeholder="例：今天考試加油！" autocomplete="off">
+            </label>
+            <p id="note-err" class="err"></p>
+            <button type="submit" id="note-save" class="btn primary full">儲存留言</button>
+            <h3>已排好的留言</h3>
+            <ul id="note-list" class="note-list"></ul>
+        </form>
+    </dialog>
 
     <!-- 管理員登入 -->
     <dialog id="login" class="sheet small">
@@ -166,8 +188,8 @@
 
     <div id="toast" class="toast" role="status"></div>
 
-    <script src="config.js?v=20261022b"></script>
-    <script src="lib.js?v=20261022b"></script>
-    <script src="app.js?v=20261022b"></script>
+    <script src="config.js?v=20261022c"></script>
+    <script src="lib.js?v=20261022c"></script>
+    <script src="app.js?v=20261022c"></script>
 </body>
 </html>

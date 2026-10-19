@@ -19,6 +19,12 @@
     const CACHE_TIME_KEY = 'breakfast-cache-time';
     const LIB = window.BreakfastLib;
     const REMINDER_HOUR = 7; // 「加到行事曆」的提醒時間
+    const GEO_KEY = 'breakfast-geo';       // 地址 → 座標（查過的存起來，不用每次重查）
+    const HOME_KEY = 'breakfast-home';     // 出發地址
+    const WALK_KEY = 'breakfast-walk';     // 只抽步行幾分鐘內的店（沒有就是不限）
+    const WX_KEY = 'breakfast-weather';
+    const NOTE_KEY = 'breakfast-note';     // 管理者給 00 的今日留言
+    const DEFAULT_POINT = { lat: 25.05, lon: 121.61 }; // 沒設出發地址時，天氣用南港
 
     // 試算表標題（第一列）↔ 欄位，和 apps-script/Code.gs 一致
     const FIELDS = {
@@ -63,6 +69,9 @@
         'bookmark': '<path d="M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4z"/>',
         'share-2': '<path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1"/><path d="M12 14v-11"/><path d="M9 6l3 -3l3 3"/>',
         'calendar-plus': '<path d="M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/><path d="M16 19h6"/><path d="M19 16v6"/>',
+        'walk': '<path d="M13 4m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M7 21l3 -4"/><path d="M16 21l-2 -4l-3 -3l1 -6"/><path d="M6 12l2 -3l4 -1l3 3l3 1"/>',
+        'message': '<path d="M8 9h8"/><path d="M8 13h6"/><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"/>',
+        'trash': '<path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/>',
         'download': '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/>',
         'info-circle': '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/>',
         'tools-kitchen-2': '<path d="M19 3v12h-5c-.023 -3.681 .184 -7.406 5 -12zm0 12v6h-1v-3m-10 -14v17m-3 -17v3a3 3 0 1 0 6 0v-3"/>',
@@ -86,6 +95,10 @@
         log: readLog(),       // 週曆用：[[店家 id, 時間], …]
         passport: readPassport(), // 護照用：{ 店家 id: 第一次吃的時間 }
         quip: false,          // 荷包蛋正在說悄悄話
+        geo: readGeo(),       // { 地址: { lat, lon, level, t } 或 { fail: true, t } }
+        weather: null,        // { now, today, tomorrow }，抓不到就是 null
+        note: readNote(),     // 今天的留言 { date, text }
+        notes: [],            // 管理者看到的留言列表
         lineIdx: 0,           // 戳荷包蛋時，輪到第幾句
         cal: null,            // 政府行事曆（國定假日），沒抓到就是 null
         calYears: new Set(),  // 行事曆有哪幾年
@@ -193,11 +206,27 @@
             const res = await fetch(API_URL, { cache: 'no-store' });
             const data = await res.json();
             if (!data.ok) throw new Error(data.error || '讀取失敗');
+            setNote(data.note);
             return data.items.map(normalize).filter((x) => x.name);
         }
         const res = await fetch(CONFIG.CSV_URL, { cache: 'no-store' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return csvToItems(await res.text());
+    }
+
+    function readNote() {
+        try {
+            const n = JSON.parse(storage.get(NOTE_KEY) || 'null');
+            return n && n.date && n.text ? n : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // 後端只會回傳「今天」的留言；後端還沒更新時沒有這個欄位，就當作沒有留言
+    function setNote(n) {
+        state.note = n && n.text ? { date: String(n.date), text: String(n.text).slice(0, 80) } : null;
+        storage.set(NOTE_KEY, state.note ? JSON.stringify(state.note) : null);
     }
 
     function readCache() {
@@ -224,6 +253,7 @@
             state.loaded = true;
             state.updatedAt = Number(storage.get(CACHE_TIME_KEY)) || 0;
             renderAll();
+            runGeoQueue();
         }
         try {
             const items = await fetchItems();
@@ -234,6 +264,7 @@
             state.stale = false;
             writeCache();
             renderAll();
+            runGeoQueue();
         } catch (err) {
             console.error(err);
             state.stale = true;
@@ -388,6 +419,7 @@
         return h >>> 0;
     };
     const dayKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const isoDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const WEEK_MON = '一二三四五六日';
     const FORTUNE_TEXT = { 5: '今天超順！想吃什麼都對', 4: '運氣不錯，照直覺選就好', 3: '平平順順，吃飽最重要', 2: '低調一點，吃熟悉的最安心' };
     const TYPE_ICON = { 蛋餅: 'egg', 漢堡: 'burger', 早午餐: 'bread', 飯糰: 'bowl', 中式: 'soup', 超商: 'building-store', 飲料: 'coffee' };
@@ -453,6 +485,144 @@
         return { text: `明天 ${fmtTime(h.open)}–${fmtTime(h.close)} 營業`, cls: 'soon' };
     }
 
+    /* ---------- 出發地址與步行距離 ---------- */
+
+    function readGeo() {
+        try { return JSON.parse(storage.get(GEO_KEY) || '{}') || {}; } catch (e) { return {}; }
+    }
+    const homeAddr = () => (storage.get(HOME_KEY) || String(CONFIG.HOME_ADDRESS || '')).trim();
+    const maxWalk = () => { const n = Number(storage.get(WALK_KEY)); return n === 10 || n === 15 || n === 20 ? n : 0; };
+    const geoOf = (addr) => { const g = addr && state.geo[addr]; return g && !g.fail ? g : null; };
+    const homePoint = () => geoOf(homeAddr());
+
+    // 出發點到這家店的直線距離（公尺）；還沒查到座標就是 null
+    function distanceOf(item) {
+        const a = homePoint();
+        const b = geoOf(item.addr);
+        return a && b ? LIB.haversine(a.lat, a.lon, b.lat, b.lon) : null;
+    }
+
+    // 卡片上顯示的步行資訊；null 代表什麼都不顯示（還沒設地址、還在查）
+    function walkInfo(item) {
+        if (!homeAddr() || !homePoint()) return null;
+        const m = distanceOf(item);
+        if (m != null) return { text: LIB.formatWalk(m), muted: false };
+        const g = item.addr && state.geo[item.addr];
+        if (!item.addr) return { text: '沒有地址，算不出步行距離', muted: true };
+        if (g && g.fail) return { text: '地址查不到，算不出步行距離', muted: true };
+        return null;
+    }
+
+    function walkHtml(item) {
+        if (!homeAddr()) return '';
+        const w = walkInfo(item);
+        return `<div class="walk${w && w.muted ? ' muted' : ''}" data-dist="${esc(item.id)}"${w ? '' : ' hidden'}>${icon('walk')}<span>${w ? esc(w.text) : ''}</span></div>`;
+    }
+
+    // 座標一筆一筆查到，就地更新畫面上的距離，不重畫整個清單
+    function updateDistances() {
+        document.querySelectorAll('[data-dist]').forEach((el) => {
+            const item = findItem(el.dataset.dist);
+            const w = item && walkInfo(item);
+            el.hidden = !w;
+            el.classList.toggle('muted', !!(w && w.muted));
+            const span = el.querySelector('span');
+            if (span) span.textContent = w ? w.text : '';
+        });
+        renderBar();
+    }
+
+    function sortByDistance(list) {
+        if (!homePoint()) return list;
+        const far = 1e9;
+        return list.map((it, i) => ({ it, i, d: distanceOf(it) })).sort((a, b) => ((a.d == null ? far : a.d) - (b.d == null ? far : b.d)) || a.i - b.i).map((x) => x.it);
+    }
+
+    // 查不到的地址，隔一天再試（可能只是那時沒網路）
+    const needsGeo = (addr) => { const g = state.geo[addr]; return !g || (g.fail && Date.now() - g.t > DAY_MS); };
+    let geoRunning = false;
+
+    // 在背景一筆一筆查（出發地址先查）。Nominatim 規定每秒最多一次，所以每筆之間會等一下；查過的存在手機裡，之後不會重查
+    async function runGeoQueue() {
+        if (geoRunning || !homeAddr() || navigator.onLine === false) return;
+        geoRunning = true;
+        let did = false;
+        try {
+            for (;;) {
+                const addrs = [homeAddr(), ...state.items.map((it) => it.addr)].filter(Boolean);
+                const todo = addrs.filter((a, i) => addrs.indexOf(a) === i && needsGeo(a));
+                if (!todo.length) break;
+                const addr = todo[0];
+                const r = await LIB.geocode(addr);
+                if (!addrs.includes(addr)) continue; // 查的時候地址被改掉了
+                state.geo[addr] = r ? { lat: r.lat, lon: r.lon, level: r.level, t: Date.now() } : { fail: true, t: Date.now() };
+                storage.set(GEO_KEY, JSON.stringify(state.geo));
+                did = true;
+                updateDistances();
+                refreshHomeNote();
+                if (r && addr === homeAddr()) loadWeather();
+                await sleep(1100);
+            }
+        } finally {
+            geoRunning = false;
+        }
+        // 全部查完才重新排序，而且只在使用者還停在第一張卡的時候，免得看到一半卡片跳掉
+        if (did && (state.view === 'grid' || state.swipeIndex === 0) && !document.querySelector('dialog[open]')) renderList();
+    }
+
+    function saveHome() {
+        const input = $('#home-addr');
+        if (!input) return;
+        const addr = input.value.trim();
+        storage.set(HOME_KEY, addr || null);
+        if (addr && state.geo[addr] && state.geo[addr].fail) { delete state.geo[addr]; storage.set(GEO_KEY, JSON.stringify(state.geo)); } // 重新試一次
+        renderList();
+        updateDistances();
+        const dlg = $('#settings');
+        const top = dlg.scrollTop;
+        renderSettings(); // 下面的說明文字會跟著有沒有地址改變
+        dlg.scrollTop = top;
+        loadWeather();
+        runGeoQueue();
+        toast(addr ? '已儲存，正在查位置' : '已清除出發地址');
+    }
+
+    function geoSummary() {
+        const home = homeAddr();
+        if (!home) return '填上你常出發的地址（家、公司、學校都可以），卡片就會顯示走路幾分鐘。地址只存在這支手機；查座標時會把地址送到 OpenStreetMap 的免費服務，不會附上其他資料。';
+        const g = state.geo[home];
+        if (!g) return navigator.onLine === false ? '目前沒有網路，連上網路後會自動查位置。' : '正在查位置…';
+        if (g.fail) return '找不到這個地址。請確認有「縣市、區、路名、門牌號碼」，例如：台北市南港區忠孝東路六段 1 號。';
+        const shops = state.items.filter((it) => it.addr);
+        const ok = shops.filter((it) => geoOf(it.addr)).length;
+        const failed = shops.filter((it) => state.geo[it.addr] && state.geo[it.addr].fail).length;
+        const pending = shops.length - ok - failed;
+        const precise = g.level === 'street' ? '只找到路名附近，距離會有些誤差' : g.level === 'lane' ? '找到巷弄附近' : '已找到';
+        return `出發點：${precise}。店家位置 ${ok} / ${shops.length} 家${pending ? '（還在查）' : ''}${failed ? `，${failed} 家的地址查不到` : ''}。`;
+    }
+
+    const refreshHomeNote = () => { const el = $('#home-note'); if (el) el.textContent = geoSummary(); };
+
+    /* ---------- 天氣（Open-Meteo） ---------- */
+
+    // 用出發地址的位置（沒設就用南港）；半小時內不重抓，抓不到就安靜地不顯示
+    async function loadWeather() {
+        const p = homePoint() || DEFAULT_POINT;
+        let cached = null;
+        try { cached = JSON.parse(storage.get(WX_KEY) || 'null'); } catch (e) { cached = null; }
+        const usable = cached && cached.day === dayKey() && Math.abs(cached.lat - p.lat) < 0.01 && Math.abs(cached.lon - p.lon) < 0.01 && cached.data;
+        if (usable) {
+            if (!state.weather) { state.weather = cached.data; renderHero(); }
+            if (Date.now() - cached.t < 30 * 60 * 1000) return;
+        }
+        try {
+            const data = await LIB.fetchWeather(p.lat, p.lon);
+            state.weather = data;
+            storage.set(WX_KEY, JSON.stringify({ t: Date.now(), day: dayKey(), lat: p.lat, lon: p.lon, data }));
+            renderHero();
+        } catch (e) { /* 沒網路或服務暫時不能用：不顯示天氣就好 */ }
+    }
+
     // 抽「現在」：略過已打烊的；抽「明天」：略過明天公休的；都略過最近 2 天吃過的。略過後一家都不剩，就不略過
     function drawPool(mode = effectiveMode()) {
         const list = visible();
@@ -469,10 +639,17 @@
             pool = open.length ? open : list;
             closed = open.length ? list.length - open.length : 0;
         }
+        // 只抽走得到的店：還不知道距離的店（位置還沒查到）不會被排除
+        let far = 0;
+        const limit = maxWalk();
+        if (limit && homePoint()) {
+            const near = pool.filter((it) => { const m = distanceOf(it); return m == null || LIB.walkMinutes(m) <= limit; });
+            if (near.length) { far = pool.length - near.length; pool = near; }
+        }
         const fresh = pool.filter((it) => !recentlyEaten(it.id));
         const eaten = fresh.length ? pool.length - fresh.length : 0;
         if (fresh.length) pool = fresh;
-        return { list: pool, closed, rest, eaten, mode };
+        return { list: pool, closed, rest, far, eaten, mode };
     }
 
     async function toasterAnimation(dlg) {
@@ -829,12 +1006,19 @@
         return name ? `<p class="pick-warn">${icon('info-circle')}${tomorrow ? '明天' : '今天'}是${esc(name)}，有些店可能休息，先打電話確認比較保險</p>` : '';
     }
 
+    // 下雨的時候，說明這家要不要出門
+    function weatherWarn(item, mode) {
+        const text = LIB.weatherNote(state.weather, mode, !!item.link);
+        return text ? `<p class="pick-warn">${icon('info-circle')}${esc(text)}</p>` : '';
+    }
+
     function pickHtml(item, pool) {
         const tomorrow = pool.mode === 'tomorrow';
         const from = state.filter === '全部' ? '' : `「${state.filter}」`;
         const skipped = [
             pool.closed ? `${pool.closed} 家打烊` : '',
             pool.rest ? `${pool.rest} 家明天公休` : '',
+            pool.far ? `${pool.far} 家太遠` : '',
             pool.eaten ? `${pool.eaten} 家最近吃過` : '',
         ].filter(Boolean).join('、');
         const ago = eatenText(item.id);
@@ -844,9 +1028,11 @@
                 <p class="pick-label">${tomorrow ? '明天早餐就吃' : '今天就吃'}</p>
                 <h2 class="pick-name" tabindex="-1" autofocus>${esc(item.name)}</h2>
                 <p class="last-eaten" data-last="${esc(item.id)}">${ago ? `上次吃：${ago}` : ''}</p>
+                ${walkHtml(item)}
                 ${photoHtml(item, { w: 900, forceStatus: tomorrow ? tomorrowStatus(item) : undefined })}
                 ${noteHtml(item)}
                 ${holidayWarn(tomorrow)}
+                ${weatherWarn(item, pool.mode)}
                 ${pickActions(item)}
                 ${tomorrow ? pinButtonHtml(item.id) : ''}
                 ${extraActions(item, tomorrow)}
@@ -957,9 +1143,10 @@
     // 營業中的排前面，沒開的排最後；同一種狀態維持試算表原本的順序
     const STATUS_ORDER = { open: 0, soon: 1, none: 2, closed: 3 };
     function sortByStatus(list) {
-        if (!list.some((it) => it.hours)) return list;
+        const near = sortByDistance(list); // 有出發地址的話，同一種營業狀態裡近的排前面
+        if (!near.some((it) => it.hours)) return near;
         const rank = (it) => STATUS_ORDER[(statusOf(it) || { cls: 'none' }).cls];
-        return list.map((it, i) => ({ it, i, r: rank(it) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.it);
+        return near.map((it, i) => ({ it, i, r: rank(it) })).sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.it);
     }
 
     function renderSwipe(source) {
@@ -969,6 +1156,7 @@
                 ${photoHtml(item, { tags: true, edit: true, pill: true })}
                 <div class="body">
                     <h3 class="name">${esc(item.name)}</h3>
+                    ${walkHtml(item)}
                     ${infoRows(item)}
                     ${actionsHtml(item)}
                 </div>
@@ -1028,12 +1216,14 @@
 
     const GROUPS = [['open', '營業中'], ['soon', '等一下開'], ['none', '營業時間還沒填'], ['closed', '現在沒開']];
 
-    function renderGrid(list) {
+    function renderGrid(source) {
+        const list = sortByDistance(source);
         const card = (item) => `
             <div class="gcard" role="button" tabindex="0" data-act="detail" data-id="${esc(item.id)}" aria-label="${esc(item.name)}">
                 ${photoHtml(item, { edit: true, w: 480 })}
                 <div class="body">
                     <h3 class="name">${esc(item.name)}</h3>
+                    ${walkHtml(item)}
                     ${item.note ? `<div class="like">愛吃 ${esc(noteItems(item.note).join('、'))}</div>` : ''}
                 </div>
             </div>`;
@@ -1066,6 +1256,9 @@
         }
         $('#foot-info').textContent = count + updated;
         $('#admin-btn').innerHTML = isAdmin() ? '離開管理模式' : `${icon('lock')} 管理`;
+        const nb = $('#notes-btn');
+        nb.hidden = !isAdmin();
+        nb.innerHTML = `${icon('message')} 留言給 00`;
     }
 
     /* ---------- 搖一搖抽籤 ---------- */
@@ -1460,6 +1653,17 @@
                     <p class="hint">${METHOD_HINT[method]}</p>
                 </section>
                 <section>
+                    <h3>出發地址<small>算步行距離用</small></h3>
+                    <div class="inline-add">
+                        <input id="home-addr" maxlength="120" value="${esc(homeAddr())}" placeholder="例：台北市南港區忠孝東路六段 1 號" enterkeyhint="done" autocomplete="off">
+                        <button type="button" class="btn sm" data-act="save-home">儲存</button>
+                    </div>
+                    <p class="hint" id="home-note">${geoSummary()}</p>
+                    <h3 class="sub-title">只抽走得到的店</h3>
+                    ${seg('set-walk', String(maxWalk()), [['0', '不限'], ['10', '10 分內'], ['15', '15 分內'], ['20', '20 分內']])}
+                    <p class="hint">${homeAddr() ? '步行幾分鐘是用直線距離估的。位置還沒查到的店不會被排除。' : '要先填出發地址，這個才有用。'}</p>
+                </section>
+                <section>
                     <h3>搖一搖</h3>
                     <button type="button" class="row-switch" role="switch" aria-checked="${shakeOn}" data-act="toggle-shake"><span>搖一搖抽籤</span><i class="switch"></i></button>
                     <p class="hint" id="shake-note">${shakeNote}</p>
@@ -1527,6 +1731,7 @@
         const lines = [];
         const special = specialToday(now);
         if (special && special.kind !== 'holiday') lines.push(special.greeting);
+        if (state.note && state.note.date === isoDay(now)) lines.push(`留言給 00：${state.note.text}`);
         const pin = pinLine(now);
         if (pin) lines.push(pin);
         if (special && special.kind === 'holiday') lines.push(special.greeting);
@@ -1535,6 +1740,8 @@
         if (near) lines.push(near);
         const tom = !(special && special.kind === 'holiday') && holidayName(tomorrowDate());
         if (tom) lines.push(`明天是${tom}，有些店可能休息`);
+        const wx = LIB.weatherLine(state.weather, autoMode());
+        if (wx) lines.push(wx);
         lines.push(greeting(now));
         const far = LIB.countdownLine(now, SPECIAL_DAYS);
         if (far && far !== near) lines.push(far);
@@ -1768,6 +1975,7 @@
                     <h2 class="name" tabindex="-1" autofocus>${esc(item.name)}</h2>
                     ${st ? `<span class="status ${st.cls}">${esc(st.text)}</span>` : ''}
                     <p class="last-eaten" data-last="${esc(id)}">${ago ? `上次吃：${ago}` : ''}</p>
+                    ${walkHtml(item)}
                     ${infoRows(item)}
                     ${actionsHtml(item)}
                     <div class="actions"><button type="button" class="act" data-act="share" data-id="${esc(id)}" data-mode="${effectiveMode()}">${icon('share-2')}傳給對方</button></div>
@@ -1815,6 +2023,65 @@
     }
 
     /* ---------- 管理模式 ---------- */
+
+    // 留言給 00：選一天寫一句話，那天荷包蛋就會說出來
+    const NEED_UPDATE = '後端還沒更新：請把新版 Code.gs 貼到 Apps Script 並重新部署（步驟在說明文件）。';
+    const noteErr = (msg) => { $('#note-err').textContent = msg || ''; };
+    const noteMsg = (e) => (e && e.message === '未知的動作' ? NEED_UPDATE : (e && e.message) || '發生錯誤');
+    const noteDayLabel = (iso) => { const [y, m, d] = iso.split('-').map(Number); return `${m}/${d}（週${WEEK[new Date(y, m - 1, d).getDay()]}）`; };
+
+    function renderNotes() {
+        $('#note-list').innerHTML = state.notes.length
+            ? state.notes.map((n) => `<li>
+                <button type="button" class="note-row" data-act="note-edit" data-date="${esc(n.date)}" aria-label="修改 ${esc(noteDayLabel(n.date))} 的留言"><b>${esc(noteDayLabel(n.date))}</b><span>${esc(n.text)}</span></button>
+                <button type="button" class="icon-btn" data-act="note-del" data-date="${esc(n.date)}" aria-label="刪除 ${esc(noteDayLabel(n.date))} 的留言">${icon('trash')}</button></li>`).join('')
+            : '<li class="empty">還沒有排好的留言</li>';
+    }
+
+    async function openNotes() {
+        const dlg = $('#notes');
+        $('#note-date').min = isoDay();
+        $('#note-date').value = isoDay(tomorrowDate());
+        $('#note-text').value = '';
+        noteErr('');
+        state.notes = [];
+        renderNotes();
+        dlg.showModal();
+        dlg.scrollTop = 0;
+        try {
+            state.notes = (await api('listNotes')).notes || [];
+            renderNotes();
+        } catch (e) {
+            noteErr(noteMsg(e));
+        }
+    }
+
+    async function saveNote(date, text) {
+        const btn = $('#note-save');
+        btn.disabled = true;
+        noteErr('');
+        try {
+            state.notes = (await api('saveNote', { date, text })).notes || [];
+            renderNotes();
+            if (date === isoDay()) { setNote(text ? { date, text } : null); renderHero(); }
+            toast(text ? '已儲存留言' : '已刪除留言');
+            return true;
+        } catch (e) {
+            noteErr(noteMsg(e));
+            return false;
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function onSaveNote(e) {
+        e.preventDefault();
+        const date = $('#note-date').value;
+        const text = $('#note-text').value.trim();
+        if (!date) { noteErr('請選一天'); return; }
+        if (!text) { noteErr('請寫一句話（要刪除留言，按下面列表的垃圾桶）'); return; }
+        if (await saveNote(date, text)) $('#note-text').value = '';
+    }
 
     async function api(action, payload = {}, pw = state.pw) {
         const res = await fetch(API_URL, {
@@ -2140,6 +2407,18 @@
                     storage.set(METHOD_KEY, el.dataset.v === 'toaster' ? null : el.dataset.v);
                     renderSettings();
                     break;
+                case 'note-edit':
+                    $('#note-date').value = el.dataset.date;
+                    $('#note-text').value = (state.notes.find((n) => n.date === el.dataset.date) || {}).text || '';
+                    $('#note-text').focus();
+                    break;
+                case 'note-del': saveNote(el.dataset.date, ''); break;
+                case 'save-home': saveHome(); break;
+                case 'set-walk':
+                    storage.set(WALK_KEY, el.dataset.v === '0' ? null : el.dataset.v);
+                    renderSettings();
+                    renderBar();
+                    break;
                 case 'toggle-shake': toggleShake(); break;
                 case 'draw-mode': switchDrawMode(); break;
                 case 'pin': togglePin(id); el.outerHTML = pinButtonHtml(id); break;
@@ -2150,6 +2429,7 @@
         });
 
         document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target && e.target.id === 'home-addr') { e.preventDefault(); saveHome(); return; }
             const card = e.target.closest && e.target.closest('.gcard');
             if (card && e.target === card && (e.key === 'Enter' || e.key === ' ')) {
                 e.preventDefault();
@@ -2172,6 +2452,10 @@
         });
 
         $('#admin-btn').addEventListener('click', onAdminButton);
+        $('#notes-btn').addEventListener('click', openNotes);
+        $('#note-form').addEventListener('submit', onSaveNote);
+        $('#notes [data-close]').innerHTML = icon('x');
+        enableSwipeClose($('#notes'));
         $('#add-btn').addEventListener('click', () => openEditor(null));
         $('#login-form').addEventListener('submit', onLogin);
         $('#edit-form').addEventListener('submit', onSave);
@@ -2207,10 +2491,12 @@
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) return;
             refreshTheme();
+            loadWeather();
             if (!state.loaded) return;
             if (Date.now() - state.lastFetch > 60 * 1000) load();
             else renderAll();
         });
+        window.addEventListener('online', () => { runGeoQueue(); loadWeather(); });
 
         // 開著不動的時候，每分鐘更新一次日夜模式、問候語和抽籤範圍（不動卡片，免得看到一半跳掉）
         setInterval(() => {
@@ -2231,4 +2517,5 @@
     renderAll();
     load();
     loadCalendar();
+    loadWeather();
 })();

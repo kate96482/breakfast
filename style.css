@@ -579,6 +579,25 @@ textarea { resize: vertical; }
 .pick-warn { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--soon-soft); color: var(--text-dark); font-size: 0.86rem; line-height: 1.5; }
 .pick-warn .ico { flex: none; margin-top: 2px; color: var(--soon); }
 
+/* 步行距離 */
+.walk { display: flex; align-items: center; gap: 5px; font-size: 0.85rem; font-weight: bold; color: var(--primary-text); }
+.walk[hidden] { display: none; }
+.walk.muted { font-weight: normal; color: var(--text-3); }
+.walk .ico { width: 1.1em; height: 1.1em; flex: none; }
+.pick .walk { justify-content: center; margin: -6px 0 0; }
+.gcard .walk { font-size: 0.78rem; }
+.settings .sub-title { margin-top: 18px; }
+
+/* 留言給 00 */
+.notes h3 { margin: 18px 0 2px; font-size: 0.92rem; color: var(--text-2); }
+.note-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.note-list li { display: flex; align-items: center; gap: 8px; }
+.note-list li.empty { color: var(--text-3); font-size: 0.88rem; padding: 6px 0; }
+.note-row { flex: 1; min-width: 0; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--surface-2); color: var(--text-dark); text-align: left; display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
+.note-row b { color: var(--primary-text); font-size: 0.82rem; }
+.note-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foot-links .link-btn[hidden] { display: none; }
+
 /* 提示訊息 */
 .toast {
     position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 86px);

@@ -4,13 +4,17 @@
  * 貼到「早餐試算表 → 擴充功能 → Apps Script」裡使用。
  * 設定步驟請看 docs/部署說明.md。
  *
- * GET  ：回傳所有店家（網頁讀資料用，不需要密碼）
- * POST ：check（檢查密碼）、save（新增／修改）、delete（刪除），都需要密碼
+ * GET  ：回傳所有店家，和「今天」的那一則留言（網頁讀資料用，不需要密碼）
+ * POST ：check（檢查密碼）、save（新增／修改）、delete（刪除）、
+ *        listNotes（看留言）、saveNote（寫留言／刪留言），都需要密碼
  */
 
 const SHEET_INDEX = 0;                        // 讀第一個工作表
 const PHOTO_FOLDER_NAME = '00 早餐清單照片';   // 照片存在雲端硬碟的這個資料夾
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const NOTE_SHEET_NAME = '小語';                // 「留言給 00」存在這個工作表（第一次留言時自動建立）
+const MAX_NOTE_LEN = 50;
+const TZ = 'Asia/Taipei';
 
 // 網頁欄位 ↔ 試算表標題（第一列）
 const FIELDS = {
@@ -34,7 +38,7 @@ function doGet() {
   try {
     const sheet = getSheet_();
     if (hasMissingIds_(sheet)) withLock_(() => ensureIds_(sheet));
-    return json_({ ok: true, items: readAll_(sheet) });
+    return json_({ ok: true, items: readAll_(sheet), note: todayNote_() });
   } catch (err) {
     return json_({ ok: false, error: String(err.message || err) });
   }
@@ -62,6 +66,11 @@ function doPost(e) {
         case 'delete':
           remove_(sheet, req.id);
           return json_({ ok: true });
+        case 'listNotes':
+          return json_({ ok: true, notes: listNotes_() });
+        case 'saveNote':
+          saveNote_(req.date, req.text);
+          return json_({ ok: true, notes: listNotes_() });
         default:
           return json_({ ok: false, error: '未知的動作' });
       }
@@ -215,6 +224,77 @@ function savePhoto_(photo, storeName) {
   const file = getPhotoFolder_().createFile(Utilities.newBlob(bytes, mime, name));
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   return 'https://lh3.googleusercontent.com/d/' + file.getId() + '=w1000';
+}
+
+/* ---------- 留言給 00 ---------- */
+
+// 日期格子被試算表轉成日期的時候，也統一轉回 yyyy-MM-dd
+function noteDay_(v) {
+  return v instanceof Date ? Utilities.formatDate(v, TZ, 'yyyy-MM-dd') : String(v || '').trim();
+}
+
+function getNoteSheet_(create) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(NOTE_SHEET_NAME);
+  if (!sh && create) {
+    sh = ss.insertSheet(NOTE_SHEET_NAME);
+    sh.getRange(1, 1, 1, 2).setValues([['日期', '內容']]);
+    sh.getRange(2, 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+  }
+  return sh;
+}
+
+// 網站公開讀取的只有「今天」這一則，其他天的留言不會被看到
+function todayNote_() {
+  try {
+    const sh = getNoteSheet_(false);
+    if (!sh || sh.getLastRow() < 2) return null;
+    const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+    const rows = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+    for (let i = 0; i < rows.length; i++) {
+      if (noteDay_(rows[i][0]) === today && String(rows[i][1]).trim()) {
+        return { date: today, text: String(rows[i][1]).trim().slice(0, MAX_NOTE_LEN) };
+      }
+    }
+  } catch (err) { /* 留言壞了不影響店家清單 */ }
+  return null;
+}
+
+// 今天以後的留言（含今天），日期由近到遠
+function listNotes_() {
+  const sh = getNoteSheet_(false);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const today = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues()
+    .map((r) => ({ date: noteDay_(r[0]), text: String(r[1]).trim() }))
+    .filter((n) => /^\d{4}-\d{2}-\d{2}$/.test(n.date) && n.date >= today && n.text)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+    .slice(0, 60);
+}
+
+// 同一天只留一則；內容空白就是刪除
+function saveNote_(date, text) {
+  const day = String(date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error('日期格式不對');
+  const content = String(text || '').replace(/\s+/g, ' ').trim();
+  if (content.length > MAX_NOTE_LEN) throw new Error('留言太長了（最多 ' + MAX_NOTE_LEN + ' 字）');
+  const sh = getNoteSheet_(!!content);
+  if (!sh) return;
+  const last = sh.getLastRow();
+  let row = -1;
+  if (last >= 2) {
+    const days = sh.getRange(2, 1, last - 1, 1).getValues();
+    for (let i = 0; i < days.length; i++) {
+      if (noteDay_(days[i][0]) === day) { row = i + 2; break; }
+    }
+  }
+  if (!content) {
+    if (row > 0) sh.deleteRow(row);
+    return;
+  }
+  if (row < 0) row = last + 1;
+  sh.getRange(row, 1).setNumberFormat('@').setValue(day);
+  sh.getRange(row, 2).setValue(content);
 }
 
 /* ---------- 試算表工具 ---------- */
