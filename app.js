@@ -875,11 +875,13 @@
     let lastMotion = null;
     let spikes = [];
     let lastShake = 0;
+    let motionSeen = false; // 這次打開網頁後，有沒有收到過動作感應資料
 
     // 1 秒內晃 3 次以上才算搖，走路或拿起手機不會觸發；抽籤面板、設定面板開著的時候也不觸發
     function onMotion(e) {
         const a = e.accelerationIncludingGravity;
         if (!a || a.x == null) return;
+        motionSeen = true;
         const cur = [a.x, a.y, a.z];
         if (lastMotion) {
             const now = Date.now();
@@ -904,6 +906,22 @@
         window.removeEventListener('devicemotion', onMotion);
         lastMotion = null;
         spikes = [];
+        motionSeen = false;
+    }
+
+    // iPhone 每次重新打開網頁，動作感應的權限都要在「點一下」的當下重新請求一次，不然收不到任何資料。
+    // 所以搖一搖開著、但這次還沒收到動作資料時，就在第一次點畫面時補請求（已經有資料就不會再問）
+    function armShakePermission() {
+        if (typeof DeviceMotionEvent === 'undefined' || typeof DeviceMotionEvent.requestPermission !== 'function') return;
+        document.addEventListener('click', async () => {
+            if (motionSeen || !isShakeOn()) return;
+            try {
+                if ((await DeviceMotionEvent.requestPermission()) === 'granted') {
+                    startShake();
+                    if (!document.querySelector('dialog[open]')) toast('搖一搖已啟用');
+                }
+            } catch (e) { /* 這次不能請求或被拒絕，維持原狀 */ }
+        }, { once: true, capture: true });
     }
 
     // iPhone 要在「點一下」的當下請求動作感應權限，所以這裡不能先 await 別的東西
@@ -1023,7 +1041,7 @@
         const seg = (act, current, options) => `<div class="seg" role="group">${options.map(([v, label]) =>
             `<button type="button" class="${v === current ? 'on' : ''}" data-act="${act}" data-v="${v}" aria-pressed="${v === current}">${label}</button>`).join('')}</div>`;
         const shakeNote = shakeOn
-            ? '已開啟：在主畫面搖一搖手機就會抽。搖不動的話，關掉再開一次。'
+            ? '已開啟：在主畫面搖一搖手機就會抽。iPhone 重新打開網頁後，第一次點畫面時可能會再問你一次是否允許動作感應。'
             : shakeCapable()
                 ? '開啟後，在主畫面搖一搖手機就會抽籤。iPhone 第一次會問你要不要允許動作感應。'
                 : '這台裝置沒有動作感應，用手機才能使用。';
@@ -1502,7 +1520,33 @@
         enableSwipeClose($('#detail'));
         enableSwipeClose($('#mine'));
         enableSwipeClose($('#settings'));
-        if (isShakeOn()) startShake();
+
+        // 彈出視窗開著的時候，把背後的頁面固定住（記住捲到哪裡，關掉再還原），
+        // 不然在視窗或灰色背景上滑動，背景也會跟著動
+        let lockedY = 0;
+        const syncScrollLock = () => {
+            const style = document.body.style;
+            const locked = style.position === 'fixed';
+            const anyOpen = !!document.querySelector('dialog[open]');
+            if (anyOpen && !locked) {
+                lockedY = window.scrollY;
+                style.position = 'fixed';
+                style.top = `-${lockedY}px`;
+                style.left = '0';
+                style.right = '0';
+            } else if (!anyOpen && locked) {
+                style.position = '';
+                style.top = '';
+                style.left = '';
+                style.right = '';
+                window.scrollTo(0, lockedY);
+            }
+        };
+        document.querySelectorAll('dialog').forEach((d) => new MutationObserver(syncScrollLock).observe(d, { attributes: true, attributeFilter: ['open'] }));
+        if (isShakeOn()) {
+            startShake();
+            armShakePermission();
+        }
         $('#editor [data-close]').innerHTML = icon('x');
 
         document.addEventListener('click', (e) => {
